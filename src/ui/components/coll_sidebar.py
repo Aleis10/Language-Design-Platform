@@ -15,7 +15,7 @@ class Sidebar(QFrame):
         self.layout.setContentsMargins(8, 8, 8, 8)
         self.layout.setSpacing(6)
 
-        # Toggle Button (Hamburger)
+        #Button (Hamburger mennu)
         self.btn_toggle = QPushButton("≡")
         self.btn_toggle.setFixedSize(40, 40)
         self.btn_toggle.setStyleSheet("""
@@ -24,15 +24,15 @@ class Sidebar(QFrame):
                 font-weight: bold;
                 border: none;
                 border-radius: 6px;
+                color:black;
             }
             QPushButton:hover { background-color: #e5e5e5; }
         """)
         self.btn_toggle.clicked.connect(self.toggle_sidebar)
         self.layout.addWidget(self.btn_toggle)
 
-        # Nav items 
         nav_items = [
-            ("assets/icons/overview.svg", "Overview"),
+            ("Language-Design-Platform/assets/icons/overview.svg", "Overview"),
             ("assets/icons/lexicon.svg", "Lexicon"),
             ("assets/icons/grammar.svg", "Grammar"),
             ("assets/icons/logogram.svg", "Logograms"),
