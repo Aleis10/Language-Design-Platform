@@ -1,13 +1,17 @@
 from PySide6.QtWidgets import QPushButton
+from PySide6.QtGui import QIcon
+from PySide6.QtCore import QSize
 
 #collapsable button
 class nav_button(QPushButton):
     
-    def __init__(self,icon_str:str,text:str):
+    def __init__(self,icon_path:str,text:str):
         super.__init__()
 
-        self.icon_str = icon_str
         self.Full_text = text
+
+        self.setIcon(QIcon(icon_path))
+        self.iconSize(QSize(20,20))
 
         self.setFlat(True)
         self.setCheckable(True)
@@ -34,8 +38,8 @@ class nav_button(QPushButton):
 
     def set_collapsed(self,collapsed:bool):
         if collapsed():
-            self.setText(self.Full_text)
+            self.setText("")
             self.setToolTip(self.Full_texttext)
         else:
-            self.setText(f"{self.icon_str} {self.Full_text}")
+            self.setText(f"{self.Full_text}")
             self.setToolTip("")
