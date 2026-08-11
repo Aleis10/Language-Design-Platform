@@ -6,12 +6,12 @@ from PySide6.QtCore import QSize
 class nav_button(QPushButton):
     
     def __init__(self,icon_path:str,text:str):
-        super.__init__()
+        super().__init__()
 
-        self.Full_text = text
+        self.full_text = text
 
         self.setIcon(QIcon(icon_path))
-        self.iconSize(QSize(20,20))
+        self.setIconSize(QSize(20,20))
 
         self.setFlat(True)
         self.setCheckable(True)
@@ -37,9 +37,9 @@ class nav_button(QPushButton):
         """)
 
     def set_collapsed(self,collapsed:bool):
-        if collapsed():
+        if collapsed:
             self.setText("")
-            self.setToolTip(self.Full_texttext)
+            self.setToolTip(self.full_text)
         else:
-            self.setText(f"{self.Full_text}")
+            self.setText(f"{self.full_text}")
             self.setToolTip("")
