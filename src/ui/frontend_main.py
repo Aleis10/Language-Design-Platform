@@ -8,4 +8,6 @@ class main_window(QMainWindow):
         self.setWindowTitle("Lexicography & Language Software")
         self.resize(1400,950)
 
+        self.frameSize(20,100)
+
 
