@@ -17,11 +17,11 @@ class MainWindow(QMainWindow): # Changed to CamelCase
 
         # Stacked Pages
         self.pages = QStackedWidget()
-        self.pages.addWidget(QLabel("🌐 Overview Page", alignment=Qt.AlignmentFlag.AlignCenter))
-        self.pages.addWidget(QLabel("📖 Lexicon Page", alignment=Qt.AlignmentFlag.AlignCenter))
-        self.pages.addWidget(QLabel("📝 Grammar Page", alignment=Qt.AlignmentFlag.AlignCenter))
-        self.pages.addWidget(QLabel("🎨 Logograms Canvas Page", alignment=Qt.AlignmentFlag.AlignCenter))
-        self.pages.addWidget(QLabel("⚙️ Settings Page", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(QLabel("Overview Page", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(QLabel("Lexicon Page", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(QLabel("Grammar Page", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(QLabel("Logograms Canvas Page", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(QLabel("Settings Page", alignment=Qt.AlignmentFlag.AlignCenter))
 
         # Add Sidebar
         self.sidebar = Sidebar(on_page_changed_callback=self.pages.setCurrentIndex)
