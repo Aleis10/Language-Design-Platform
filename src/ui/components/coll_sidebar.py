@@ -32,10 +32,12 @@ class Sidebar(QFrame):
         self.layout.addWidget(self.btn_toggle)
 
         nav_items = [
-            ("Language-Design-Platform/assets/icons/overview.svg", "Overview"),
+            ("../Language-Design-Platform/assets/icons/overview.svg", "Dashboard"),
+            ("assets/icons/logogram.svg", "Language Overview"),
+            ("assets/icons/logogram.svg", "Logograms"),
+            ("assets/icons/logogram.svg", "Keyboard"),
             ("assets/icons/lexicon.svg", "Lexicon"),
             ("assets/icons/grammar.svg", "Grammar"),
-            ("assets/icons/logogram.svg", "Logograms"),
             ("assets/icons/settings.svg", "Settings")
         ]
 

@@ -2,25 +2,27 @@ from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget,
 from PySide6.QtCore import Qt   
 from .components.coll_sidebar import Sidebar
 
-class MainWindow(QMainWindow): # Changed to CamelCase
+class MainWindow(QMainWindow): 
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("Lexicography & Language Software")
         self.resize(1400, 950)
 
-        # Main Layout Container
+        # Main Layout
         central_widget = QWidget()
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Stacked Pages
+        # Pages 
         self.pages = QStackedWidget()
-        self.pages.addWidget(QLabel("Overview Page", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(QLabel("Dashboard", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(QLabel("Language Overview", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(QLabel("Logograms Canvas Page", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(QLabel("Keyboard", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(QLabel("Lexicon Page", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(QLabel("Grammar Page", alignment=Qt.AlignmentFlag.AlignCenter))
-        self.pages.addWidget(QLabel("Logograms Canvas Page", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(QLabel("Settings Page", alignment=Qt.AlignmentFlag.AlignCenter))
 
         # Add Sidebar
