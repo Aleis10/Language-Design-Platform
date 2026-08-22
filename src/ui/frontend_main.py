@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QLabel
 from PySide6.QtCore import Qt   
 from .components.coll_sidebar import Sidebar
+from .pages.overview import Overview_Page
 
 class MainWindow(QMainWindow): 
     def __init__(self):
@@ -9,7 +10,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Lexicography & Language Software")
         self.resize(1400, 950)
 
-        # Main Layout
+        # Main Front Layout
         central_widget = QWidget()
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -18,7 +19,7 @@ class MainWindow(QMainWindow):
         # Pages 
         self.pages = QStackedWidget()
         self.pages.addWidget(QLabel("Dashboard", alignment=Qt.AlignmentFlag.AlignCenter))
-        self.pages.addWidget(QLabel("Language Overview", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(Overview_Page())
         self.pages.addWidget(QLabel("Logograms Canvas Page", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(QLabel("Keyboard", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(QLabel("Lexicon Page", alignment=Qt.AlignmentFlag.AlignCenter))
