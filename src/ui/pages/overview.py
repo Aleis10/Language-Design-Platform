@@ -9,19 +9,14 @@ class Overview_Page(QWidget):
         super().__init__()
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0,0,0,0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        scroll_area = QScrollArea()
-        scroll_area.setObjectName("OverviewScrollArea")
-        scroll_area.setWidgetResizable(True)
-
-        self.content_widget = QWidget()
-        self.cards_layout = QVBoxLayout(self.content_widget)
-        self.cards_layout.setContentsMargins(24, 20, 24, 24)
-        self.cards_layout.setSpacing(16)
-
-        #Top Bar
-        top_bar = QHBoxLayout()
+        #Sticky Top Bar
+        top_bar_widget = QWidget()
+        top_bar_widget.setObjectName("StickyTopBar")
+        top_bar = QHBoxLayout(top_bar_widget)
+        top_bar.setContentsMargins(24, 16, 24, 16)
 
         status_label = QLabel("Project Status:")
         self.status_combo = QComboBox()
@@ -37,9 +32,20 @@ class Overview_Page(QWidget):
         top_bar.addWidget(self.status_combo)
         top_bar.addStretch()
         top_bar.addWidget(self.btn_add_section)
-        self.cards_layout.addLayout(top_bar)
 
-        #SECTION 1: Language Details
+        main_layout.addWidget(top_bar_widget, stretch=0)
+
+        #Scrollable Container
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("OverviewScrollArea")
+        scroll_area.setWidgetResizable(True)
+
+        self.content_widget = QWidget()
+        self.cards_layout = QVBoxLayout(self.content_widget)
+        self.cards_layout.setContentsMargins(24, 20, 24, 24)
+        self.cards_layout.setSpacing(16)
+
+        #Section 1: Language Details
         details_card = QFrame()
         details_card.setProperty("class", "overview-card")
         details_layout = QVBoxLayout(details_card)
@@ -98,38 +104,38 @@ class Overview_Page(QWidget):
         details_layout.addLayout(grid_layout)
         self.cards_layout.addWidget(details_card)
 
-        #SECTION 2: History Section
+        #Section 2: History Section
         history_card = QFrame()
         history_card.setProperty("class", "overview-card")
         h_layout = QVBoxLayout(history_card)
         h_layout.setContentsMargins(16, 12, 16, 12)
         h_title = QLabel("[icon:history] History & Origins")
         h_title.setProperty("class", "section-title")
-        self.text_history = QTextEdit()
+        self.text_history = AutoResizingTextEdit()
         self.text_history.setPlaceholderText("Describe the historical origins and evolution of the language...")
         self.text_history.setMaximumHeight(100)
         h_layout.addWidget(h_title)
         h_layout.addWidget(self.text_history)
         self.cards_layout.addWidget(history_card)
 
+        #Section 3: Culture & Usage
         culture_card = QFrame()
         culture_card.setProperty("class", "overview-card")
         c_layout = QVBoxLayout(culture_card)
         c_layout.setContentsMargins(16, 12, 16, 12)
         c_title = QLabel("[icon:culture] Cultural Background & Usage")
         c_title.setProperty("class", "section-title")
-        self.text_culture = QTextEdit()
+        self.text_culture = AutoResizingTextEdit()
         self.text_culture.setPlaceholderText("Describe cultural context, registers, societal usage, or idioms...")
         self.text_culture.setMaximumHeight(100)
         c_layout.addWidget(c_title)
         c_layout.addWidget(self.text_culture)
         self.cards_layout.addWidget(culture_card)
 
-        # Stretch at bottom
         self.cards_layout.addStretch()
 
         scroll_area.setWidget(self.content_widget)
-        main_layout.addWidget(scroll_area)
+        main_layout.addWidget(scroll_area, stretch=1)
 
     #Call both Custom_Section_dialog() & Custom_card() function
     def prompt_add_section(self):
@@ -227,23 +233,21 @@ class Custom_Card(QFrame):
         header_layout.addWidget(self.btn_delete)
         self.main_layout.addLayout(header_layout)
 
-        # Content Body based on type
+        # Content Body 
         self.content_widget = QWidget()
         content_layout = QVBoxLayout(self.content_widget)
         content_layout.setContentsMargins(0, 6, 0, 0)
 
-        if card_type_idx == 0:  # Rich Text Area
-            self.input_field = QTextEdit()
-            self.input_field.setPlaceholderText(f"Enter details for {title}...")
-            self.input_field.setMaximumHeight(110)
+        if card_type_idx == 0:  # Rich Text Area (Auto Resized added)
+            self.input_field = AutoResizingTextEdit(f"Enter details for {title}...")
             content_layout.addWidget(self.input_field)
 
-        elif card_type_idx == 1:  # Short Single Line Input
+        elif card_type_idx == 1:  # Single Line Input
             self.input_field = QLineEdit()
             self.input_field.setPlaceholderText(f"Enter {title}...")
             content_layout.addWidget(self.input_field)
 
-        elif card_type_idx == 2:  # Tag / List Box
+        elif card_type_idx == 2:  # List Box (Auto Resize added)
             list_controls = QHBoxLayout()
             self.item_input = QLineEdit()
             self.item_input.setPlaceholderText("Add item (e.g. dialect name, proverb)...")
@@ -253,8 +257,7 @@ class Custom_Card(QFrame):
             list_controls.addWidget(self.item_input)
             list_controls.addWidget(self.btn_add_item)
 
-            self.list_widget = QListWidget()
-            self.list_widget.setMaximumHeight(100)
+            self.list_widget = AutoResizingList()
 
             self.btn_add_item.clicked.connect(self.add_list_item)
             self.item_input.returnPressed.connect(self.add_list_item)
@@ -290,3 +293,35 @@ class Custom_Card(QFrame):
         if reply == QMessageBox.Yes:
             self.setParent(None)
             self.deleteLater()
+
+class AutoResizingTextEdit(QTextEdit):
+    def __init__(self, placeholder=""):
+        super().__init__()
+        self.setPlaceholderText(placeholder)
+        self.setMinimumHeight(80)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.textChanged.connect(self.adjust_height)
+
+    def adjust_height(self):
+        doc_height = int(self.document().size().height())
+        margins = self.contentsMargins()
+        total_height = doc_height + margins.top() + margins.bottom() + 12
+        self.setFixedHeight(max(80, total_height))
+
+class AutoResizingList(QListWidget):
+    def __init__(self):
+        super().__init__()
+        self.setMinimumHeight(40)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+    def update_height(self):
+        if self.count() == 0:
+            self.setFixedHeight(40)
+            return
+        total_height = sum(self.sizeHintForRow(i) for i in range(self.count()))
+        margins = self.contentsMargins()
+        self.setFixedHeight(total_height + margins.top() + margins.bottom() + 6)
+
+    def addItem(self, item):
+        super().addItem(item)
+        self.update_height()

@@ -1,0 +1,10 @@
+{
+    "folder-customization.folders": [
+        {
+            "path": "Language-Design-Platform/src/ui/__pycache__/"
+        },
+        {
+            "path": "Language-Design-Platform/src/ui/launch_dashboard/"
+        }
+    ]
+}

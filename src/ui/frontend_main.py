@@ -3,11 +3,17 @@ from PySide6.QtCore import Qt
 from .components.coll_sidebar import Sidebar
 from .pages.overview import Overview_Page
 
-class MainWindow(QMainWindow): 
-    def __init__(self):
-        super().__init__()
 
-        self.setWindowTitle("Lexicography & Language Software")
+class MainWindow(QMainWindow): 
+    def __init__(self, db_manager=None, db_path=None, project_name=None, parent=None):
+        super().__init__(parent)
+
+        self.db_manager = db_manager
+        self.db_path = db_path
+        self.project_name = project_name
+
+        title_suffix = f" - {project_name}" if project_name else ""
+        self.setWindowTitle(f"Lexicography & Language Software{title_suffix}")
         self.resize(1400, 950)
 
         # Main Front Layout

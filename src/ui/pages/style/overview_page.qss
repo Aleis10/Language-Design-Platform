@@ -1,0 +1,134 @@
+/* Page Background */
+
+/* Top Header */
+QWidget#StickyTopBar {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    min-height: 40px;
+}
+QComboBox#StatusCombo {
+    padding: 6px 12px;
+    border: 1px solid #cccccc;
+    border-radius: 6px;
+    background-color: #ffffff;
+    color: #000000;
+    font-weight: bold;
+}
+
+
+QScrollArea#OverviewScrollArea {
+    border: none;
+    background-color: #f8f9fa;
+}
+
+/* Base Card Style */
+QFrame.overview-card {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+}
+
+QLabel{
+    font-size: 15px;
+    color: #111111;
+}
+
+QLabel.section-title {
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+
+/* Form Inputs, Text Areas, Combo Boxes & Lists */
+QLineEdit, QTextEdit, QListWidget, QComboBox {
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 6px;
+    background-color: #ffffff;
+    color: #000000;
+    selection-background-color: #007acc;
+    selection-color: #ffffff;
+}
+
+/* Focused State for Inputs */
+QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QListWidget:focus {
+    border: 1px solid #007acc;
+}
+
+/* + Add Section Button */
+QPushButton#BtnAddSection {
+    background-color: #007acc;
+    color: #ffffff;
+    font-weight: bold;
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+}
+QPushButton#BtnAddSection:hover {
+    background-color: #005999;
+}
+
+QDialog {
+    background-color: #1e1e1e;
+}
+
+/* Dialog Form Labels (Section Title / Section Type) */
+QDialog QLabel {
+    color: #ffffff;
+    font-weight: bold;
+}
+
+/* Cancel Button */
+QDialog QPushButton {
+    color: #ffffff;
+    background-color: #3a3a3a;
+    border: 1px solid #555555;
+    padding: 6px 14px;
+    border-radius: 4px;
+}
+QDialog QPushButton:hover {
+    background-color: #4a4a4a;
+}
+
+/* Card Control Buttons (Edit, Collapse, Delete) */
+QPushButton.card-control-btn {
+    border: none;
+    background: transparent;
+    font-size: 11px;
+    color: #555555;
+}
+QPushButton.card-control-btn:hover {
+    background-color: #f0f0f0;
+    border-radius: 4px;
+}
+
+/* Dropdown Popup List View */
+QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    color: #000000;
+    border: 1px solid #cccccc;
+    selection-background-color: #007acc;
+    selection-color: #ffffff;
+}
+
+/* List Widget Items */
+QListWidget::item {
+    color: #000000;
+    padding: 4px;
+}
+QListWidget::item:selected {
+    background-color: #007acc;
+    color: #ffffff;
+}
+
+/* Add Item Button in Tag/List Box */
+QPushButton#BtnAddListItem {
+    background-color: #28a745;
+    color: #ffffff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+QPushButton#BtnAddListItem:hover {
+    background-color: #218838;
+}
