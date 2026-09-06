@@ -13,6 +13,8 @@ class ProjectHub(QDialog):
         self.setFixedSize(500, 380)
         self.setModal(True)
 
+        self.setObjectName("ProjectHubDialog")
+
         # Path to save
         self.selected_db_path = None
         self.project_name = None
@@ -23,9 +25,9 @@ class ProjectHub(QDialog):
         main_layout.setContentsMargins(24, 24, 24, 24)
 
         header_title = QLabel("Language Workspace")
-        header_title.setStyleSheet("font-size: 20px; font-weight: bold; color: #111111;")
+        header_title.setObjectName("HubHeaderTitle")
         header_subtitle = QLabel("Create a new standalone project or open an existing file.")
-        header_subtitle.setStyleSheet("color: #666666; font-size: 13px; margin-bottom: 12px;")
+        header_subtitle.setObjectName("HubHeaderSubtitle")
         
         main_layout.addWidget(header_title)
         main_layout.addWidget(header_subtitle)
@@ -39,23 +41,11 @@ class ProjectHub(QDialog):
         menu_layout.setSpacing(12)
 
         btn_new = QPushButton("+ Create New Language Project")
-        btn_new.setStyleSheet("""
-            QPushButton {
-                background-color: #007acc; color: #ffffff; font-weight: bold;
-                font-size: 14px; padding: 12px; border-radius: 6px; border: none;
-            }
-            QPushButton:hover { background-color: #005999; }
-        """)
+        btn_new.setObjectName("BtnNewProject")
         btn_new.clicked.connect(lambda: self.stack.setCurrentIndex(1))
 
         btn_open = QPushButton(" Open Existing Project (.db)")
-        btn_open.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff; color: #333333; font-weight: bold;
-                font-size: 14px; padding: 12px; border-radius: 6px; border: 1px solid #cccccc;
-            }
-            QPushButton:hover { background-color: #f0f0f0; }
-        """)
+        btn_open.setObjectName("BtnOpenProject")
         btn_open.clicked.connect(self._handle_open_existing)
 
         menu_layout.addStretch()
@@ -69,19 +59,22 @@ class ProjectHub(QDialog):
         form_layout.setSpacing(8)
 
         lbl_name = QLabel("Language / Project Name:")
-        lbl_name.setStyleSheet("font-weight: bold; font-size: 13px;")
+        lbl_name.setObjectName("LblProjectName")
         self.input_name = QLineEdit()
+        self.input_name.setObjectName("InputProjectName")
         self.input_name.setPlaceholderText("e.g., Nepal Bhasa, Quenya, Limbu")
 
         lbl_path = QLabel("Save Location:")
-        lbl_path.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 6px;")
+        lbl_path.setObjectName("LblSaveLocation")
         
         path_layout = QHBoxLayout()
         self.input_path = QLineEdit()
+        self.input_path.setObjectName("InputProjectPath")
         self.input_path.setReadOnly(True)
         self.input_path.setPlaceholderText("No file location selected...")
         
         btn_browse = QPushButton("Browse...")
+        btn_browse.setObjectName("BtnBrowseLocation")
         btn_browse.clicked.connect(self._browse_save_location)
 
         path_layout.addWidget(self.input_path)
@@ -89,10 +82,11 @@ class ProjectHub(QDialog):
 
         btn_box = QHBoxLayout()
         btn_back = QPushButton("Back")
+        btn_back.setObjectName("BtnBack")
         btn_back.clicked.connect(lambda: self.stack.setCurrentIndex(0))
         
         btn_create = QPushButton("Create Project")
-        btn_create.setStyleSheet("background-color: #28a745; color: #ffffff; font-weight: bold; padding: 6px 16px;")
+        btn_create.setObjectName("BtnCreateProject")
         btn_create.clicked.connect(self._handle_create_project)
 
         btn_box.addWidget(btn_back)
@@ -111,6 +105,15 @@ class ProjectHub(QDialog):
         self.stack.addWidget(form_widget)
 
         main_layout.addWidget(self.stack)
+
+        # Load QSS Stylesheet
+        self._load_stylesheet()
+
+    def _load_stylesheet(self):
+        style_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "project_hub.qss")
+        if os.path.exists(style_path):
+            with open(style_path, "r", encoding="utf-8") as f:
+                self.setStyleSheet(f.read())
 
     def _browse_save_location(self):
         suggested_name = self.input_name.text().strip().lower().replace(" ", "_") or "untitled_language"

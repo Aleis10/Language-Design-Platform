@@ -1,0 +1,151 @@
+
+QDialog#ProjectHubDialog {
+    background-color: #ffffff;
+}
+
+/* Header Typography */
+QLabel#HubHeaderTitle {
+    font-size: 20px;
+    font-weight: bold;
+    color: #111111;
+    background: transparent;
+}
+
+QLabel#HubHeaderSubtitle {
+    color: #666666;
+    font-size: 13px;
+    margin-bottom: 12px;
+    background: transparent;
+}
+
+/* Menu View Action Buttons */
+QPushButton#BtnNewProject {
+    background-color: #007acc;
+    color: #ffffff;
+    font-weight: bold;
+    font-size: 14px;
+    padding: 12px;
+    border-radius: 6px;
+    border: none;
+}
+
+QPushButton#BtnNewProject:hover {
+    background-color: #005999;
+}
+
+QPushButton#BtnNewProject:pressed {
+    background-color: #004c80;
+}
+
+QPushButton#BtnOpenProject {
+    background-color: #ffffff;
+    color: #333333;
+    font-weight: bold;
+    font-size: 14px;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #cccccc;
+}
+
+QPushButton#BtnOpenProject:hover {
+    background-color: #f0f0f0;
+    border-color: #b0b0b0;
+}
+
+QPushButton#BtnOpenProject:pressed {
+    background-color: #e5e5e5;
+}
+
+/* Form View Field Labels */
+QLabel#LblProjectName,
+QLabel#LblSaveLocation {
+    font-weight: bold;
+    font-size: 13px;
+    color: #222222;
+    background: transparent;
+}
+
+QLabel#LblSaveLocation {
+    margin-top: 6px;
+}
+
+/* Input Fields */
+QLineEdit#InputProjectName,
+QLineEdit#InputProjectPath {
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 8px 10px;
+    background-color: #ffffff;
+    color: #111111;
+    font-size: 13px;
+    selection-background-color: #007acc;
+    selection-color: #ffffff;
+}
+
+QLineEdit#InputProjectName:focus,
+QLineEdit#InputProjectPath:focus {
+    border: 1px solid #007acc;
+}
+
+QLineEdit#InputProjectPath[readOnly="true"] {
+    background-color: #f8f9fa;
+    color: #555555;
+}
+
+/* Form View Action Buttons */
+QPushButton#BtnBrowseLocation {
+    background-color: #f0f0f0;
+    color: #333333;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-weight: bold;
+    font-size: 13px;
+}
+
+QPushButton#BtnBrowseLocation:hover {
+    background-color: #e2e2e2;
+    border-color: #b0b0b0;
+}
+
+QPushButton#BtnBrowseLocation:pressed {
+    background-color: #d5d5d5;
+}
+
+QPushButton#BtnBack {
+    background-color: #ffffff;
+    color: #555555;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 7px 18px;
+    font-weight: bold;
+    font-size: 13px;
+}
+
+QPushButton#BtnBack:hover {
+    background-color: #f5f5f5;
+    color: #222222;
+    border-color: #b0b0b0;
+}
+
+QPushButton#BtnBack:pressed {
+    background-color: #e5e5e5;
+}
+
+QPushButton#BtnCreateProject {
+    background-color: #28a745;
+    color: #ffffff;
+    font-weight: bold;
+    padding: 7px 18px;
+    border-radius: 4px;
+    border: none;
+    font-size: 13px;
+}
+
+QPushButton#BtnCreateProject:hover {
+    background-color: #218838;
+}
+
+QPushButton#BtnCreateProject:pressed {
+    background-color: #1e7e34;
+}
