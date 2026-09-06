@@ -1,5 +1,15 @@
+import os
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QPushButton
 from .coll_buttons import nav_button 
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+ICON_DIR = os.path.join(BASE_DIR, "assets", "icons")
+
+
+def get_icon(name: str) -> str:
+    path = os.path.join(ICON_DIR, name)
+    return path if os.path.exists(path) else ""
+
 
 class Sidebar(QFrame):
     def __init__(self, on_page_changed_callback):
@@ -32,13 +42,13 @@ class Sidebar(QFrame):
         self.layout.addWidget(self.btn_toggle)
 
         nav_items = [
-            ("../Language-Design-Platform/assets/icons/overview.svg", "Dashboard"),
-            ("assets/icons/logogram.svg", "Language Overview"),
-            ("assets/icons/logogram.svg", "Logograms"),
-            ("assets/icons/logogram.svg", "Keyboard"),
-            ("assets/icons/lexicon.svg", "Lexicon"),
-            ("assets/icons/grammar.svg", "Grammar"),
-            ("assets/icons/settings.svg", "Settings")
+            (get_icon("overview.svg"), "Dashboard"),
+            (get_icon("overview.svg"), "Language Overview"),
+            (get_icon("logogram.svg"), "Logograms"),
+            (get_icon("keyboard.svg"), "Keyboard"),
+            (get_icon("lexicon.svg"), "Lexicon"),
+            (get_icon("grammar.svg"), "Grammar"),
+            (get_icon("settings.svg"), "Settings")
         ]
 
         for index, (icon_path, label) in enumerate(nav_items):

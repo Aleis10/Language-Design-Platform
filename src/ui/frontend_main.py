@@ -5,10 +5,12 @@ from .pages.overview import Overview_Page
 
 
 class MainWindow(QMainWindow): 
-    def __init__(self, db_manager=None, db_path=None, project_name=None, parent=None):
+    def __init__(self, db_manager=None, overview_repo=None, language_id=None, db_path=None, project_name=None, parent=None):
         super().__init__(parent)
 
         self.db_manager = db_manager
+        self.overview_repo = overview_repo
+        self.language_id = language_id
         self.db_path = db_path
         self.project_name = project_name
 
@@ -23,9 +25,11 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         # Pages 
+        self.overview_page = Overview_Page(overview_repo=self.overview_repo, language_id=self.language_id)
+
         self.pages = QStackedWidget()
         self.pages.addWidget(QLabel("Dashboard", alignment=Qt.AlignmentFlag.AlignCenter))
-        self.pages.addWidget(Overview_Page())
+        self.pages.addWidget(self.overview_page)
         self.pages.addWidget(QLabel("Logograms Canvas Page", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(QLabel("Keyboard", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(QLabel("Lexicon Page", alignment=Qt.AlignmentFlag.AlignCenter))

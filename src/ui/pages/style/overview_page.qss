@@ -67,6 +67,19 @@ QPushButton#BtnAddSection:hover {
     background-color: #005999;
 }
 
+/* Save Overview Button */
+QPushButton#BtnSaveOverview {
+    background-color: #28a745;
+    color: #ffffff;
+    font-weight: bold;
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+}
+QPushButton#BtnSaveOverview:hover {
+    background-color: #218838;
+}
+
 QDialog {
     background-color: #1e1e1e;
 }

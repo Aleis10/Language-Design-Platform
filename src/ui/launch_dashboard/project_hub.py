@@ -144,6 +144,7 @@ class ProjectHub(QDialog):
         )
         if file_path:
             self.selected_db_path = file_path
+            self.project_name = os.path.splitext(os.path.basename(file_path))[0].replace("_", " ").title()
             self.is_new_project = False
             self.accept()
 

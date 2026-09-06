@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ui.launch_dashboard.project_hub import run_project_hub
 from ui.frontend_main import MainWindow
 from database.db_Manager import Database_Manager
-
+from database.overview_db import LanguageOverviewRepository
 
 def load_stylesheet(app: QApplication, filepath: str) -> None:
     if os.path.exists(filepath):
@@ -29,13 +29,32 @@ def main():
         sys.exit(0)
 
     db_path, project_name, is_new_project = hub_result
+    
+    # Fallback project name from file name if None
+    if not project_name:
+        project_name = os.path.splitext(os.path.basename(db_path))[0].replace("_", " ").title() or "Untitled Language"
 
-    # creates .db file
+    # Initialize Database Manager
     db_manager = Database_Manager(db_path)
+    overview_repo = LanguageOverviewRepository(db_manager)
+
+    # Get or Create main Language Record
+    if is_new_project:
+        language_id = overview_repo.create_initial_language(project_name)
+    else:
+        language_id = overview_repo.get_primary_language_id()
+        if language_id:
+            stored_name = overview_repo.get_language_name(language_id)
+            if stored_name:
+                project_name = stored_name
+        else:
+            language_id = overview_repo.create_initial_language(project_name)
 
     # Launch Main Window
     window = MainWindow(
         db_manager=db_manager,
+        overview_repo=overview_repo,
+        language_id=language_id,
         db_path=db_path,
         project_name=project_name
     )

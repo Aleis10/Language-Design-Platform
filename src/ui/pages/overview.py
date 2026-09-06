@@ -1,18 +1,23 @@
+import json
 from PySide6.QtWidgets import (
-    QWidget,QTextEdit,QComboBox,QLineEdit,QVBoxLayout,QHBoxLayout,QFrame,QPushButton,
-    QLabel,QScrollArea,QFormLayout,QMessageBox,QDialog,QListWidget,QListWidgetItem
+    QWidget, QTextEdit, QComboBox, QLineEdit, QVBoxLayout, QHBoxLayout, QFrame, QPushButton,
+    QLabel, QScrollArea, QFormLayout, QMessageBox, QDialog, QListWidget, QListWidgetItem
 )
 from PySide6.QtCore import Qt
 
+
 class Overview_Page(QWidget):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, overview_repo=None, language_id=None, parent=None):
+        super().__init__(parent)
+        self.overview_repo = overview_repo
+        self.language_id = language_id
+        self.custom_cards = []
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        #Sticky Top Bar
+        # Sticky Top Bar
         top_bar_widget = QWidget()
         top_bar_widget.setObjectName("StickyTopBar")
         top_bar = QHBoxLayout(top_bar_widget)
@@ -24,6 +29,23 @@ class Overview_Page(QWidget):
         self.status_combo.setEditable(True)
         self.status_combo.addItems(["Drafting", "Active / In Development", "Stable / Complete", "Archived"])
 
+        self.btn_save = QPushButton("Save Overview")
+        self.btn_save.setObjectName("BtnSaveOverview")
+        self.btn_save.setStyleSheet("""
+            QPushButton#BtnSaveOverview {
+                background-color: #28a745;
+                color: #ffffff;
+                font-weight: bold;
+                padding: 8px 16px;
+                border-radius: 6px;
+                border: none;
+            }
+            QPushButton#BtnSaveOverview:hover {
+                background-color: #218838;
+            }
+        """)
+        self.btn_save.clicked.connect(self.save_data)
+
         self.btn_add_section = QPushButton("+ Add Custom Section")
         self.btn_add_section.setObjectName("BtnAddSection")
         self.btn_add_section.clicked.connect(self.prompt_add_section)
@@ -31,11 +53,12 @@ class Overview_Page(QWidget):
         top_bar.addWidget(status_label)
         top_bar.addWidget(self.status_combo)
         top_bar.addStretch()
+        top_bar.addWidget(self.btn_save)
         top_bar.addWidget(self.btn_add_section)
 
         main_layout.addWidget(top_bar_widget, stretch=0)
 
-        #Scrollable Container
+        # Scrollable Container
         scroll_area = QScrollArea()
         scroll_area.setObjectName("OverviewScrollArea")
         scroll_area.setWidgetResizable(True)
@@ -45,7 +68,7 @@ class Overview_Page(QWidget):
         self.cards_layout.setContentsMargins(24, 20, 24, 24)
         self.cards_layout.setSpacing(16)
 
-        #Section 1: Language Details
+        # Section 1: Language Details
         details_card = QFrame()
         details_card.setProperty("class", "overview-card")
         details_layout = QVBoxLayout(details_card)
@@ -55,7 +78,6 @@ class Overview_Page(QWidget):
         sec1_title.setProperty("class", "section-title")
         details_layout.addWidget(sec1_title)
 
-        #layout
         grid_layout = QHBoxLayout()
         col1 = QFormLayout()
         col2 = QFormLayout()
@@ -67,7 +89,7 @@ class Overview_Page(QWidget):
         self.input_code = QLineEdit()
         self.input_code.setPlaceholderText("e.g. QYA")
         self.input_demonym = QLineEdit()
-        self.input_demonym.setPlaceholderText("e.g. Globle")
+        self.input_demonym.setPlaceholderText("e.g. Global")
 
         col1.addRow("English Name (Exonym):", self.input_exonym)
         col1.addRow("Native Name (Endonym):", self.input_endonym)
@@ -77,7 +99,7 @@ class Overview_Page(QWidget):
         self.input_pop = QLineEdit()
         self.input_pop.setPlaceholderText("e.g. 50,000 native speakers")
         self.input_family = QLineEdit()
-        self.input_family.setPlaceholderText(" Demo Family")
+        self.input_family.setPlaceholderText("Demo Family")
 
         self.combo_word_order = QComboBox()
         self.combo_word_order.setEditable(True)
@@ -104,7 +126,7 @@ class Overview_Page(QWidget):
         details_layout.addLayout(grid_layout)
         self.cards_layout.addWidget(details_card)
 
-        #Section 2: History Section
+        # Section 2: History Section
         history_card = QFrame()
         history_card.setProperty("class", "overview-card")
         h_layout = QVBoxLayout(history_card)
@@ -118,7 +140,7 @@ class Overview_Page(QWidget):
         h_layout.addWidget(self.text_history)
         self.cards_layout.addWidget(history_card)
 
-        #Section 3: Culture & Usage
+        # Section 3: Culture & Usage
         culture_card = QFrame()
         culture_card.setProperty("class", "overview-card")
         c_layout = QVBoxLayout(culture_card)
@@ -137,25 +159,115 @@ class Overview_Page(QWidget):
         scroll_area.setWidget(self.content_widget)
         main_layout.addWidget(scroll_area, stretch=1)
 
-    #Call both Custom_Section_dialog() & Custom_card() function
-    def prompt_add_section(self):
+        # Load persisted database values if available
+        self.load_data()
 
+    def load_data(self):
+        """Populates UI fields from the database."""
+        if not self.overview_repo or not self.language_id:
+            return
+
+        data = self.overview_repo.get_overview_data(self.language_id)
+        if data:
+            if data.get("exonym"):
+                self.input_exonym.setText(data["exonym"])
+            if data.get("autonym"):
+                self.input_endonym.setText(data["autonym"])
+            if data.get("language_code"):
+                self.input_code.setText(data["language_code"])
+            if data.get("demonym"):
+                self.input_demonym.setText(data["demonym"])
+            if data.get("speaker_population"):
+                self.input_pop.setText(data["speaker_population"])
+            if data.get("genetic_classification"):
+                self.input_family.setText(data["genetic_classification"])
+            if data.get("word_order"):
+                self.combo_word_order.setCurrentText(data["word_order"])
+            if data.get("morphology"):
+                self.combo_morphology.setCurrentText(data["morphology"])
+            if data.get("script_system"):
+                self.combo_script.setCurrentText(data["script_system"])
+            if data.get("status"):
+                self.status_combo.setCurrentText(data["status"])
+            if data.get("history"):
+                self.text_history.setPlainText(data["history"])
+            if data.get("cultural_context"):
+                self.text_culture.setPlainText(data["cultural_context"])
+
+        # Load custom sections
+        sections = self.overview_repo.get_custom_sections(self.language_id)
+        for sec in sections:
+            self._add_card_widget(
+                title=sec["title"],
+                card_type_idx=sec.get("section_type", 0),
+                section_id=sec["id"],
+                initial_content=sec.get("content", "")
+            )
+
+    def save_data(self):
+        """Saves overview fields and custom sections back to the database."""
+        if not self.overview_repo or not self.language_id:
+            return
+
+        payload = {
+            "exonym": self.input_exonym.text().strip(),
+            "autonym": self.input_endonym.text().strip(),
+            "language_code": self.input_code.text().strip(),
+            "demonym": self.input_demonym.text().strip(),
+            "speaker_population": self.input_pop.text().strip(),
+            "genetic_classification": self.input_family.text().strip(),
+            "word_order": self.combo_word_order.currentText().strip(),
+            "morphology": self.combo_morphology.currentText().strip(),
+            "script_system": self.combo_script.currentText().strip(),
+            "history": self.text_history.toPlainText().strip(),
+            "cultural_context": self.text_culture.toPlainText().strip(),
+            "status": self.status_combo.currentText().strip(),
+        }
+        self.overview_repo.save_overview_data(self.language_id, payload)
+
+        for card in self.custom_cards:
+            card.save_card_content()
+
+    def _add_card_widget(self, title: str, card_type_idx: int, section_id: str = None, initial_content: str = ""):
+        stretch_item = self.cards_layout.itemAt(self.cards_layout.count() - 1)
+        if stretch_item and stretch_item.spacerItem():
+            self.cards_layout.removeItem(stretch_item)
+
+        new_card = Custom_Card(
+            title=title,
+            card_type_idx=card_type_idx,
+            section_id=section_id,
+            initial_content=initial_content,
+            overview_repo=self.overview_repo,
+            on_delete_callback=self._remove_card_widget
+        )
+        self.custom_cards.append(new_card)
+        self.cards_layout.addWidget(new_card)
+        self.cards_layout.addStretch()
+
+    def _remove_card_widget(self, card):
+        if card in self.custom_cards:
+            self.custom_cards.remove(card)
+
+    def prompt_add_section(self):
         dialog = Custom_Section_Dialog(self)
         if dialog.exec():
             title, type_idx = dialog.get_data()
             if title:
-                stretch_item = self.cards_layout.itemAt(self.cards_layout.count() - 1)
-                if stretch_item and stretch_item.spacerItem():
-                    self.cards_layout.removeItem(stretch_item)
+                section_id = None
+                if self.overview_repo and self.language_id:
+                    position = len(self.custom_cards)
+                    section_id = self.overview_repo.add_custom_section(
+                        language_id=self.language_id,
+                        title=title,
+                        section_type=type_idx,
+                        content="",
+                        position=position
+                    )
+                self._add_card_widget(title, type_idx, section_id=section_id)
 
-                new_card = Custom_Card(title, type_idx)
-                self.cards_layout.addWidget(new_card)
-
-                self.cards_layout.addStretch()
-                
 
 class Custom_Section_Dialog(QDialog):
-    #Add Custom Section 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Add Custom Section")
@@ -195,12 +307,15 @@ class Custom_Section_Dialog(QDialog):
     def get_data(self):
         return self.title_input.text().strip(), self.type_combo.currentIndex()
 
-class Custom_Card(QFrame):
-    # user-created custom card
 
-    def __init__(self, title: str, card_type_idx: int):
+class Custom_Card(QFrame):
+    def __init__(self, title: str, card_type_idx: int, section_id: str = None,
+                 initial_content: str = "", overview_repo=None, on_delete_callback=None):
         super().__init__()
         self.card_type_idx = card_type_idx
+        self.section_id = section_id
+        self.overview_repo = overview_repo
+        self.on_delete_callback = on_delete_callback
         self.is_collapsed = False
 
         self.setProperty("class", "overview-card")
@@ -213,7 +328,7 @@ class Custom_Card(QFrame):
         self.title_label = QLabel(title)
         self.title_label.setProperty("class", "section-title")
 
-        # Header (Rename,Collapse & Delete)
+        # Header (Rename, Collapse & Delete)
         self.btn_rename = QPushButton("[icon:edit]")
         self.btn_collapse = QPushButton("[icon:collapse]")
         self.btn_delete = QPushButton("[icon:delete]")
@@ -238,16 +353,22 @@ class Custom_Card(QFrame):
         content_layout = QVBoxLayout(self.content_widget)
         content_layout.setContentsMargins(0, 6, 0, 0)
 
-        if card_type_idx == 0:  # Rich Text Area (Auto Resized added)
+        if card_type_idx == 0:  # Rich Text Area
             self.input_field = AutoResizingTextEdit(f"Enter details for {title}...")
+            if initial_content:
+                self.input_field.setPlainText(initial_content)
+            self.input_field.textChanged.connect(self.save_card_content)
             content_layout.addWidget(self.input_field)
 
         elif card_type_idx == 1:  # Single Line Input
             self.input_field = QLineEdit()
             self.input_field.setPlaceholderText(f"Enter {title}...")
+            if initial_content:
+                self.input_field.setText(initial_content)
+            self.input_field.textChanged.connect(self.save_card_content)
             content_layout.addWidget(self.input_field)
 
-        elif card_type_idx == 2:  # List Box (Auto Resize added)
+        elif card_type_idx == 2:  # List Box
             list_controls = QHBoxLayout()
             self.item_input = QLineEdit()
             self.item_input.setPlaceholderText("Add item (e.g. dialect name, proverb)...")
@@ -259,6 +380,16 @@ class Custom_Card(QFrame):
 
             self.list_widget = AutoResizingList()
 
+            if initial_content:
+                try:
+                    items = json.loads(initial_content)
+                    for it in items:
+                        self.list_widget.addItem(QListWidgetItem(str(it)))
+                except Exception:
+                    for line in initial_content.splitlines():
+                        if line.strip():
+                            self.list_widget.addItem(QListWidgetItem(line.strip()))
+
             self.btn_add_item.clicked.connect(self.add_list_item)
             self.item_input.returnPressed.connect(self.add_list_item)
 
@@ -267,17 +398,36 @@ class Custom_Card(QFrame):
 
         self.main_layout.addWidget(self.content_widget)
 
+    def get_content_str(self) -> str:
+        if self.card_type_idx == 0:
+            return self.input_field.toPlainText().strip()
+        elif self.card_type_idx == 1:
+            return self.input_field.text().strip()
+        elif self.card_type_idx == 2:
+            items = [self.list_widget.item(i).text() for i in range(self.list_widget.count())]
+            return json.dumps(items)
+        return ""
+
+    def save_card_content(self):
+        if self.overview_repo and self.section_id:
+            content = self.get_content_str()
+            self.overview_repo.update_custom_section(self.section_id, content=content)
+
     def add_list_item(self):
         text = self.item_input.text().strip()
         if text:
             self.list_widget.addItem(QListWidgetItem(text))
             self.item_input.clear()
+            self.save_card_content()
 
     def rename_card(self):
         from PySide6.QtWidgets import QInputDialog
         new_title, ok = QInputDialog.getText(self, "Rename Section", "New Section Title:", text=self.title_label.text())
         if ok and new_title.strip():
-            self.title_label.setText(new_title.strip())
+            cleaned_title = new_title.strip()
+            self.title_label.setText(cleaned_title)
+            if self.overview_repo and self.section_id:
+                self.overview_repo.update_custom_section(self.section_id, title=cleaned_title)
 
     def toggle_collapse(self):
         self.is_collapsed = not self.is_collapsed
@@ -291,8 +441,13 @@ class Custom_Card(QFrame):
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
+            if self.overview_repo and self.section_id:
+                self.overview_repo.delete_custom_section(self.section_id)
+            if self.on_delete_callback:
+                self.on_delete_callback(self)
             self.setParent(None)
             self.deleteLater()
+
 
 class AutoResizingTextEdit(QTextEdit):
     def __init__(self, placeholder=""):
@@ -307,6 +462,7 @@ class AutoResizingTextEdit(QTextEdit):
         margins = self.contentsMargins()
         total_height = doc_height + margins.top() + margins.bottom() + 12
         self.setFixedHeight(max(80, total_height))
+
 
 class AutoResizingList(QListWidget):
     def __init__(self):
