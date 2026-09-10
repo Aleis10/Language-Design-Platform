@@ -85,11 +85,11 @@ class GlyphCanvasWidget(QWidget):
     # Interactive Vector Drawing Canvas with Bézier smoothing and guideline grids.
     content_changed = Signal()
 
-    CANVAS_SIZE = 500
+    CANVAS_SIZE = 500  # Logical coordinate size (SVG viewBox reference)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(self.CANVAS_SIZE, self.CANVAS_SIZE)
+        self.setMinimumSize(self.CANVAS_SIZE, self.CANVAS_SIZE)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
@@ -104,11 +104,6 @@ class GlyphCanvasWidget(QWidget):
         self.pen_width = 6.0
         self.pen_color = "#111111"
         self.external_svg_renderer: Optional[QSvgRenderer] = None
-
-        # Guidelines toggles
-        self.show_quadrant_grid = True    # 9-box Chinese/Logogram grid
-        self.show_baseline_grid = True    # Linguistic baseline / cap-height
-        self.show_crosshair = True        # Center crosshair
 
         self.setStyleSheet("background-color: #ffffff; border: 1px solid #dcdcdc; border-radius: 6px;")
 
@@ -198,14 +193,11 @@ class GlyphCanvasWidget(QWidget):
         # 1. Background
         painter.fillRect(self.rect(), QColor("#ffffff"))
 
-        # 2. Guidelines (Non-destructive, purely visual)
-        self._draw_guidelines(painter)
-
-        # 3. External SVG backdrop if loaded
+        # 2. External SVG backdrop if loaded
         if self.external_svg_renderer and self.external_svg_renderer.isValid():
             self.external_svg_renderer.render(painter, QRectF(0, 0, self.CANVAS_SIZE, self.CANVAS_SIZE))
 
-        # 4. User Strokes
+        # 3. User Strokes
         for stroke in self.strokes:
             path = stroke.build_path()
             if stroke.is_eraser:
@@ -215,45 +207,6 @@ class GlyphCanvasWidget(QWidget):
             painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawPath(path)
-
-    def _draw_guidelines(self, painter: QPainter):
-        w = float(self.CANVAS_SIZE)
-        h = float(self.CANVAS_SIZE)
-
-        # 9-box Quadrant Grid (3x3)
-        if self.show_quadrant_grid:
-            grid_pen = QPen(QColor(230, 230, 230), 1, Qt.PenStyle.DashLine)
-            painter.setPen(grid_pen)
-            # Vertical lines
-            painter.drawLine(QPointF(w / 3.0, 0), QPointF(w / 3.0, h))
-            painter.drawLine(QPointF(2 * w / 3.0, 0), QPointF(2 * w / 3.0, h))
-            # Horizontal lines
-            painter.drawLine(QPointF(0, h / 3.0), QPointF(w, h / 3.0))
-            painter.drawLine(QPointF(0, 2 * h / 3.0), QPointF(w, 2 * h / 3.0))
-
-        # Center Crosshair (+)
-        if self.show_crosshair:
-            cross_pen = QPen(QColor(210, 220, 240), 1, Qt.PenStyle.SolidLine)
-            painter.setPen(cross_pen)
-            painter.drawLine(QPointF(w / 2.0, 0), QPointF(w / 2.0, h))
-            painter.drawLine(QPointF(0, h / 2.0), QPointF(w, h / 2.0))
-
-        # Linguistic Baseline / Cap-Height Guides
-        if self.show_baseline_grid:
-            # Cap-height (top guideline ~ 20%)
-            cap_pen = QPen(QColor(255, 200, 200), 1, Qt.PenStyle.DashDotLine)
-            painter.setPen(cap_pen)
-            painter.drawLine(QPointF(0, h * 0.22), QPointF(w, h * 0.22))
-
-            # Mean-line / x-height (~ 45%)
-            mean_pen = QPen(QColor(220, 220, 255), 1, Qt.PenStyle.DotLine)
-            painter.setPen(mean_pen)
-            painter.drawLine(QPointF(0, h * 0.48), QPointF(w, h * 0.48))
-
-            # Baseline (~ 75%)
-            base_pen = QPen(QColor(180, 220, 200), 1.5, Qt.PenStyle.SolidLine)
-            painter.setPen(base_pen)
-            painter.drawLine(QPointF(0, h * 0.76), QPointF(w, h * 0.76))
 
     # SVG EXPORT & IMPORT
 
@@ -390,29 +343,6 @@ class CanvasStudioToolBar(QWidget):
 
         # Grid Toggles
         layout.addSpacing(10)
-        self.btn_grid_9 = QPushButton("⊞ 3x3")
-        self.btn_grid_9.setToolTip("Toggle 9-Box Character Centering Grid")
-        self.btn_grid_9.setCheckable(True)
-        self.btn_grid_9.setChecked(True)
-        self.btn_grid_9.clicked.connect(self._toggle_quadrant)
-
-        self.btn_grid_base = QPushButton("≡ Baseline")
-        self.btn_grid_base.setToolTip("Toggle Linguistic Baseline & Cap-Height Guides")
-        self.btn_grid_base.setCheckable(True)
-        self.btn_grid_base.setChecked(True)
-        self.btn_grid_base.clicked.connect(self._toggle_baseline)
-
-        self.btn_cross = QPushButton("✚ Center")
-        self.btn_cross.setToolTip("Toggle Center Crosshair")
-        self.btn_cross.setCheckable(True)
-        self.btn_cross.setChecked(True)
-        self.btn_cross.clicked.connect(self._toggle_crosshair)
-
-        layout.addWidget(self.btn_grid_9)
-        layout.addWidget(self.btn_grid_base)
-        layout.addWidget(self.btn_cross)
-
-        layout.addStretch()
 
         # Undo / Redo
         self.btn_undo = QPushButton("↺ Undo")
@@ -460,18 +390,6 @@ class CanvasStudioToolBar(QWidget):
     def _on_width_changed(self, val: int):
         self.canvas.pen_width = float(val)
         self.lbl_width_val.setText(f"{val}px")
-
-    def _toggle_quadrant(self, checked: bool):
-        self.canvas.show_quadrant_grid = checked
-        self.canvas.update()
-
-    def _toggle_baseline(self, checked: bool):
-        self.canvas.show_baseline_grid = checked
-        self.canvas.update()
-
-    def _toggle_crosshair(self, checked: bool):
-        self.canvas.show_crosshair = checked
-        self.canvas.update()
 
     def _confirm_clear(self):
         self.canvas.clear_canvas()

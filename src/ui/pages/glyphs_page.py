@@ -151,25 +151,10 @@ class Glyphs_Page(QWidget):
         btn_add_group.setObjectName("BtnAddGroup")
         btn_add_group.clicked.connect(self.prompt_add_group)
 
-        btn_export_all = QPushButton("⤓ Export All SVGs")
-        btn_export_all.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                border: 1px solid #cccccc;
-                border-radius: 6px;
-                padding: 7px 14px;
-                font-weight: bold;
-                color: #333333;
-            }
-            QPushButton:hover { background-color: #f0f0f0; }
-        """)
-        btn_export_all.clicked.connect(self.export_all_svgs)
-
         tb_layout.addWidget(lbl_title)
         tb_layout.addSpacing(16)
         tb_layout.addWidget(self.input_search)
         tb_layout.addStretch()
-        tb_layout.addWidget(btn_export_all)
         tb_layout.addWidget(btn_add_group)
 
         gallery_layout.addWidget(top_bar)
@@ -441,31 +426,6 @@ class Glyphs_Page(QWidget):
         w_layout.setContentsMargins(12, 12, 12, 12)
         w_layout.setSpacing(12)
 
-        # LEFT: Quick Drawer (Group Glyphs)
-        self.drawer_panel = QFrame()
-        self.drawer_panel.setObjectName("StudioDrawerPanel")
-        self.drawer_panel.setFixedWidth(220)
-        dr_layout = QVBoxLayout(self.drawer_panel)
-        dr_layout.setContentsMargins(10, 10, 10, 10)
-        dr_layout.setSpacing(8)
-
-        lbl_dr_title = QLabel("☰ Group Glyphs")
-        lbl_dr_title.setStyleSheet("font-weight: bold; font-size: 12px; color: #444444;")
-        dr_layout.addWidget(lbl_dr_title)
-
-        self.drawer_list = QListWidget()
-        self.drawer_list.setStyleSheet("border: 1px solid #e0e0e0; border-radius: 4px;")
-        self.drawer_list.itemClicked.connect(self._on_drawer_item_clicked)
-        dr_layout.addWidget(self.drawer_list)
-
-        btn_stamp = QPushButton("+ Stamp as Sub-Symbol")
-        btn_stamp.setToolTip("Copy strokes of selected drawer glyph onto the canvas")
-        btn_stamp.setStyleSheet("padding: 5px 8px; font-size: 11px; border: 1px solid #cccccc; border-radius: 4px;")
-        btn_stamp.clicked.connect(self._stamp_selected_glyph)
-        dr_layout.addWidget(btn_stamp)
-
-        w_layout.addWidget(self.drawer_panel)
-
         # CENTER: Vector Drawing Canvas
         canvas_col = QVBoxLayout()
         canvas_col.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -563,45 +523,7 @@ class Glyphs_Page(QWidget):
         # Set audio
         self.audio_widget.set_glyph(glyph["id"], glyph.get("audio_path", "") or "")
 
-        # Populate drawer
-        self._populate_drawer(group["id"])
-
         self.stack.setCurrentIndex(1)
-
-    def _populate_drawer(self, group_id: str):
-        self.drawer_list.clear()
-        glyphs = self.glyph_repo.get_glyphs_by_group(group_id)
-        for g in glyphs:
-            item = QListWidgetItem(f" {g['name']}")
-            item.setData(Qt.ItemDataRole.UserRole, g)
-            if g["id"] == self.active_glyph_id:
-                item.setSelected(True)
-            self.drawer_list.addItem(item)
-
-    def _on_drawer_item_clicked(self, item: QListWidgetItem):
-        glyph = item.data(Qt.ItemDataRole.UserRole)
-        if not glyph or glyph["id"] == self.active_glyph_id:
-            return
-        
-        # Save current glyph before switching
-        self.save_active_glyph(notify=False)
-        group = {"id": self.active_group_id, "name": self.lbl_breadcrumb.text().split(">")[1].strip()}
-        self.open_studio_mode(glyph, group)
-
-    def _stamp_selected_glyph(self):
-        curr_item = self.drawer_list.currentItem()
-        if not curr_item:
-            QMessageBox.information(self, "Select Symbol", "Select a symbol from the drawer list first.")
-            return
-        glyph = curr_item.data(Qt.ItemDataRole.UserRole)
-        if glyph and glyph.get("svg_data"):
-            temp = GlyphCanvasWidget()
-            temp.load_svg(glyph["svg_data"])
-            self.canvas._push_undo()
-            for s in temp.strokes:
-                self.canvas.strokes.append(s)
-            self.canvas.update()
-            self.canvas.content_changed.emit()
 
     def _open_ipa_picker(self):
         picker = IPAPickerDialog(target_line_edit=self.input_ipa, parent=self)
@@ -650,7 +572,6 @@ class Glyphs_Page(QWidget):
 
         # Update active data
         self.active_glyph_data = self.glyph_repo.get_glyph(self.active_glyph_id)
-        self._populate_drawer(self.active_group_id)
 
         if notify:
             QMessageBox.information(self, "Saved", f"Glyph '{name}' saved successfully!")
@@ -724,29 +645,6 @@ class Glyphs_Page(QWidget):
         if res == QMessageBox.StandardButton.Yes:
             self.glyph_repo.delete_glyph(glyph_id)
             self.refresh_gallery()
-
-    def export_all_svgs(self):
-        glyphs = self.glyph_repo.get_all_glyphs(self.language_id)
-        if not glyphs:
-            QMessageBox.information(self, "Export", "No glyphs found to export.")
-            return
-
-        out_dir = os.path.join(self.data_dir, "images", "svg")
-        os.makedirs(out_dir, exist_ok=True)
-        count = 0
-        for g in glyphs:
-            svg = g.get("svg_data")
-            if svg and svg.strip():
-                clean_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', g["name"].lower())
-                fname = f"{clean_name}_{g['id'][:8]}.svg"
-                with open(os.path.join(out_dir, fname), "w", encoding="utf-8") as f:
-                    f.write(svg)
-                count += 1
-
-        QMessageBox.information(
-            self, "Export Complete",
-            f"Exported {count} standalone vector SVG files to:\n{out_dir}"
-        )
 
     def _filter_glyphs(self, text: str):
         query = text.strip().lower()
