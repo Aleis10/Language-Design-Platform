@@ -44,7 +44,7 @@ class ProjectHub(QDialog):
         btn_new.setObjectName("BtnNewProject")
         btn_new.clicked.connect(lambda: self.stack.setCurrentIndex(1))
 
-        btn_open = QPushButton(" Open Existing Project (.db)")
+        btn_open = QPushButton(" Open Existing Project (.langarc / .db)")
         btn_open.setObjectName("BtnOpenProject")
         btn_open.clicked.connect(self._handle_open_existing)
 
@@ -117,10 +117,10 @@ class ProjectHub(QDialog):
 
     def _browse_save_location(self):
         suggested_name = self.input_name.text().strip().lower().replace(" ", "_") or "untitled_language"
-        default_file = f"{suggested_name}.db"
+        default_file = f"{suggested_name}.langarc"
         
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Select Project File Location", default_file, "SQLite Database (*.db)"
+            self, "Select Project Archive Location", default_file, "Language Archive (*.langarc);;Zip Archive (*.zip);;SQLite Database (*.db)"
         )
         if file_path:
             self.input_path.setText(file_path)
@@ -133,7 +133,7 @@ class ProjectHub(QDialog):
             QMessageBox.warning(self, "Validation Error", "Please enter a Language or Project Name.")
             return
         if not path:
-            QMessageBox.warning(self, "Validation Error", "Please choose a save location for your database file.")
+            QMessageBox.warning(self, "Validation Error", "Please choose a save location for your project archive.")
             return
 
         self.project_name = name
@@ -143,7 +143,7 @@ class ProjectHub(QDialog):
 
     def _handle_open_existing(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open Language Project Database", "", "SQLite Database (*.db)"
+            self, "Open Language Project Archive", "", "Language Archive (*.langarc *.zip);;SQLite Database (*.db);;All Files (*)"
         )
         if file_path:
             self.selected_db_path = file_path

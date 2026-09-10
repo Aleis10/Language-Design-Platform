@@ -1,177 +1,91 @@
 import uuid
-import json
-from typing import Optional, Dict, Any, List
-try:
-    from database.db_Manager import Database_Manager
-except ImportError:
-    from .db_Manager import Database_Manager
+from typing import Dict, List, Any, Optional
+from database.db_Manager import Database_Manager
 
 
 class LanguageOverviewRepository:
     def __init__(self, db_manager: Database_Manager):
-        self.db_manager = db_manager
-        self._ensure_schema_extensions()
+        self.db = db_manager
 
-    def _ensure_schema_extensions(self):
-        """Ensure language_overview and overview_custom_sections have all required UI fields."""
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Check and extend language_overview table
-            cursor.execute("PRAGMA table_info(language_overview);")
-            overview_cols = {row["name"] for row in cursor.fetchall()}
-            
-            new_overview_cols = {
-                "demonym": "TEXT",
-                "speaker_population": "TEXT",
-                "word_order": "TEXT",
-                "morphology": "TEXT",
-                "script_system": "TEXT",
-                "history": "TEXT",
-                "cultural_context": "TEXT",
-                "status": "TEXT DEFAULT 'Drafting'",
-            }
-            for col, col_def in new_overview_cols.items():
-                if col not in overview_cols:
-                    cursor.execute(f"ALTER TABLE language_overview ADD COLUMN {col} {col_def};")
-
-            # Check and extend overview_custom_sections table
-            cursor.execute("PRAGMA table_info(overview_custom_sections);")
-            section_cols = {row["name"] for row in cursor.fetchall()}
-            if "section_type" not in section_cols:
-                cursor.execute("ALTER TABLE overview_custom_sections ADD COLUMN section_type INTEGER DEFAULT 0;")
-
-    def get_primary_language_id(self) -> Optional[str]:
-        """Fetch the primary language ID (first registered project language)."""
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM languages ORDER BY created_at ASC LIMIT 1;")
-            row = cursor.fetchone()
-            return row["id"] if row else None
-
-    def get_language_name(self, language_id: str) -> Optional[str]:
-        """Fetch the display name of a language by its ID."""
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM languages WHERE id = ?;", (language_id,))
-            row = cursor.fetchone()
-            return row["name"] if row else None
-
-    def create_initial_language(self, project_name: Optional[str] = None, language_type: str = "conlang_artlang") -> str:
-        """Create the master language row and default language_overview row."""
-        if not project_name or not project_name.strip():
-            project_name = "Untitled Language"
-        else:
-            project_name = project_name.strip()
-
+    def create_initial_language(self, project_name: str, language_type: str = "conlang_artlang") -> str:
         language_id = str(uuid.uuid4())
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            # 1. Insert into languages
-            cursor.execute(
+        with self.db.get_connection() as conn:
+            conn.execute(
                 "INSERT INTO languages (id, name, language_type) VALUES (?, ?, ?);",
                 (language_id, project_name, language_type)
             )
-            # 2. Insert initial overview row with exonym pre-filled
-            cursor.execute(
-                """
-                INSERT INTO language_overview (
-                    language_id, exonym, status, is_spoken, is_extinct, is_constructed
-                ) VALUES (?, ?, 'Drafting', 1, 0, 1);
-                """,
+            conn.execute(
+                "INSERT INTO language_overview (language_id, exonym) VALUES (?, ?);",
                 (language_id, project_name)
             )
         return language_id
 
-    def get_overview_data(self, language_id: str) -> Dict[str, Any]:
-        """Retrieve overview record as dictionary."""
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM language_overview WHERE language_id = ?;", (language_id,))
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
-            
-            # If row doesn't exist, create an empty one
-            cursor.execute(
-                "INSERT INTO language_overview (language_id) VALUES (?);",
-                (language_id,)
-            )
-            return {"language_id": language_id}
+    def get_primary_language_id(self) -> Optional[str]:
+        with self.db.get_connection() as conn:
+            row = conn.execute("SELECT id FROM languages LIMIT 1;").fetchone()
+            return row["id"] if row else None
 
-    def save_overview_data(self, language_id: str, data: Dict[str, Any]) -> None:
-        """Save or update language overview fields."""
-        allowed_cols = [
+    # Overview data retrive
+    def get_overview_data(self, language_id: str) -> Optional[Dict[str, Any]]:
+        with self.db.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM language_overview WHERE language_id = ?;",
+                (language_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def update_overview_field(self, language_id: str, field_name: str, value: Any):
+        allowed_fields = {
             "autonym", "exonym", "language_code", "is_spoken", "is_extinct",
             "is_constructed", "constructed_type", "genetic_classification",
-            "glottocode", "iso_639_3", "notes", "demonym", "speaker_population",
-            "word_order", "morphology", "script_system", "history", "cultural_context", "status"
-        ]
-        updates = {k: v for k, v in data.items() if k in allowed_cols}
-        if not updates:
-            return
+            "glottocode", "iso_639_3", "notes"
+        }
+        if field_name not in allowed_fields:
+            raise ValueError(f"Invalid field name: {field_name}")
 
-        set_clause = ", ".join([f"{col} = ?" for col in updates.keys()])
-        params = list(updates.values()) + [language_id]
+        query = f"UPDATE language_overview SET {field_name} = ? WHERE language_id = ?;"
+        with self.db.get_connection() as conn:
+            conn.execute(query, (value, language_id))
 
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                f"UPDATE language_overview SET {set_clause} WHERE language_id = ?;",
-                params
-            )
-
+    # Custom Section data retrive
     def get_custom_sections(self, language_id: str) -> List[Dict[str, Any]]:
-        """Fetch custom section cards ordered by position."""
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM overview_custom_sections WHERE language_id = ? ORDER BY position ASC, created_at ASC;",
-                (language_id,)
-            )
-            return [dict(row) for row in cursor.fetchall()]
-
-    def add_custom_section(self, language_id: str, title: str, section_type: int, content: str = "", position: int = 0) -> str:
-        """Create a new custom card record and return its UUID."""
-        section_id = str(uuid.uuid4())
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
+        with self.db.get_connection() as conn:
+            rows = conn.execute(
                 """
-                INSERT INTO overview_custom_sections (id, language_id, title, content, section_type, position)
-                VALUES (?, ?, ?, ?, ?, ?);
+                SELECT id, title, content, position 
+                FROM overview_custom_sections 
+                WHERE language_id = ? 
+                ORDER BY position ASC;
                 """,
-                (section_id, language_id, title, content, section_type, position)
+                (language_id,)
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def add_custom_section(self, language_id: str, title: str, content: str = "") -> str:
+        section_id = str(uuid.uuid4())
+        with self.db.get_connection() as conn:
+            pos_row = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM overview_custom_sections WHERE language_id = ?;",
+                (language_id,)
+            ).fetchone()
+            next_pos = pos_row["next_pos"]
+
+            conn.execute(
+                """
+                INSERT INTO overview_custom_sections (id, language_id, title, content, position)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (section_id, language_id, title, content, next_pos)
             )
         return section_id
 
-    def update_custom_section(self, section_id: str, title: Optional[str] = None, content: Optional[str] = None, position: Optional[int] = None):
-        """Update fields of an existing custom section."""
-        fields = []
-        params = []
-        if title is not None:
-            fields.append("title = ?")
-            params.append(title)
-        if content is not None:
-            fields.append("content = ?")
-            params.append(content)
-        if position is not None:
-            fields.append("position = ?")
-            params.append(position)
-        
-        if not fields:
-            return
-
-        params.append(section_id)
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                f"UPDATE overview_custom_sections SET {', '.join(fields)} WHERE id = ?;",
-                params
+    def update_custom_section(self, section_id: str, title: str, content: str):
+        with self.db.get_connection() as conn:
+            conn.execute(
+                "UPDATE overview_custom_sections SET title = ?, content = ? WHERE id = ?;",
+                (title, content, section_id)
             )
 
     def delete_custom_section(self, section_id: str):
-        """Delete a custom section by ID."""
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM overview_custom_sections WHERE id = ?;", (section_id,))
+        with self.db.get_connection() as conn:
+            conn.execute("DELETE FROM overview_custom_sections WHERE id = ?;", (section_id,))

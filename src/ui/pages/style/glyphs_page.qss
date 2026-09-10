@@ -1,0 +1,133 @@
+/* Glyphs Page Stylesheet */
+
+QWidget#GlyphsTopBar {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    min-height: 48px;
+}
+
+QScrollArea#GlyphsScrollArea {
+    border: none;
+    background-color: #f8f9fa;
+}
+
+/* Group Container Cards */
+QFrame.group-card {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+}
+
+QFrame#GroupHeader {
+    background-color: #fafbfc;
+    border-bottom: 1px solid #eceeef;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    padding: 8px 12px;
+}
+
+QLabel.group-title {
+    font-size: 15px;
+    font-weight: bold;
+    color: #1a1a1a;
+}
+
+QLabel.group-desc {
+    font-size: 12px;
+    color: #666666;
+}
+
+QLabel.badge-count {
+    background-color: #e9ecef;
+    color: #495057;
+    font-size: 11px;
+    font-weight: bold;
+    border-radius: 10px;
+    padding: 2px 8px;
+}
+
+/* Glyph Tile in Gallery */
+QFrame.glyph-tile {
+    background-color: #ffffff;
+    border: 1px solid #dcdcdc;
+    border-radius: 8px;
+    min-width: 140px;
+    max-width: 160px;
+    min-height: 180px;
+    max-height: 200px;
+}
+
+QFrame.glyph-tile:hover {
+    border: 1px solid #007acc;
+    background-color: #fcfdfe;
+}
+
+QFrame.glyph-tile-add {
+    background-color: #fdfdfd;
+    border: 2px dashed #cccccc;
+    border-radius: 8px;
+    min-width: 140px;
+    max-width: 160px;
+    min-height: 180px;
+    max-height: 200px;
+}
+
+QFrame.glyph-tile-add:hover {
+    border-color: #007acc;
+    background-color: #f0f7ff;
+}
+
+/* Studio Canvas Styles */
+QWidget#StudioHeader {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    min-height: 48px;
+}
+
+QFrame#StudioMetadataPanel {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+}
+
+QFrame#StudioDrawerPanel {
+    background-color: #fcfcfc;
+    border-right: 1px solid #e0e0e0;
+}
+
+/* Primary Action Buttons */
+QPushButton#BtnAddGroup {
+    background-color: #007acc;
+    color: #ffffff;
+    font-weight: bold;
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+}
+QPushButton#BtnAddGroup:hover {
+    background-color: #005999;
+}
+
+QPushButton#BtnSaveGlyph {
+    background-color: #28a745;
+    color: #ffffff;
+    font-weight: bold;
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: none;
+}
+QPushButton#BtnSaveGlyph:hover {
+    background-color: #218838;
+}
+
+QPushButton#BtnBackGallery {
+    background-color: #ffffff;
+    color: #333333;
+    border: 1px solid #cccccc;
+    font-weight: bold;
+    padding: 6px 14px;
+    border-radius: 6px;
+}
+QPushButton#BtnBackGallery:hover {
+    background-color: #f0f0f0;
+}
