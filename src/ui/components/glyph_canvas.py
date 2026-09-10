@@ -156,7 +156,7 @@ class GlyphCanvasWidget(QWidget):
         self.update()
         self.content_changed.emit()
 
-    # ==================== MOUSE EVENTS ====================
+    # MOUSE EVENTS
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -188,7 +188,7 @@ class GlyphCanvasWidget(QWidget):
             self.update()
             self.content_changed.emit()
 
-    # ==================== PAINTING ====================
+    # PAINTING
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
@@ -255,7 +255,7 @@ class GlyphCanvasWidget(QWidget):
             painter.setPen(base_pen)
             painter.drawLine(QPointF(0, h * 0.76), QPointF(w, h * 0.76))
 
-    # ==================== SVG EXPORT & IMPORT ====================
+    # SVG EXPORT & IMPORT
 
     def to_svg(self) -> str:
         # Export current drawing as standard standalone W3C SVG XML string with embedded stroke metadata.

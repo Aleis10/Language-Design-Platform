@@ -64,7 +64,7 @@ class GlyphRepository:
                 if col not in cols:
                     cursor.execute(f"ALTER TABLE glyphs ADD COLUMN {col} {col_def};")
 
-    # ==================== GROUP OPERATIONS ====================
+    # GROUP OPERATIONS
 
     def get_groups(self, language_id: str) -> List[Dict[str, Any]]:
         """Retrieve all glyph groups for a language, ordered by position."""

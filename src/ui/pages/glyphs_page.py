@@ -396,9 +396,7 @@ class Glyphs_Page(QWidget):
         tile.setCursor(Qt.CursorShape.PointingHandCursor)
         return tile
 
-    # =========================================================================
-    # VIEW 1: STUDIO CANVAS MODE
-    # =========================================================================
+    # Canvas Area (Studio Mode)
 
     def _build_studio_view(self):
         self.studio_widget = QWidget()
@@ -443,7 +441,7 @@ class Glyphs_Page(QWidget):
         w_layout.setContentsMargins(12, 12, 12, 12)
         w_layout.setSpacing(12)
 
-        # --- LEFT: Quick Drawer (Group Glyphs) ---
+        # LEFT: Quick Drawer (Group Glyphs)
         self.drawer_panel = QFrame()
         self.drawer_panel.setObjectName("StudioDrawerPanel")
         self.drawer_panel.setFixedWidth(220)
@@ -468,7 +466,7 @@ class Glyphs_Page(QWidget):
 
         w_layout.addWidget(self.drawer_panel)
 
-        # --- CENTER: Vector Drawing Canvas ---
+        # CENTER: Vector Drawing Canvas
         canvas_col = QVBoxLayout()
         canvas_col.setAlignment(Qt.AlignmentFlag.AlignCenter)
         canvas_col.setSpacing(8)
@@ -482,7 +480,7 @@ class Glyphs_Page(QWidget):
 
         w_layout.addLayout(canvas_col, stretch=1)
 
-        # --- RIGHT: Linguistic Metadata & Audio Panel ---
+        # RIGHT: Linguistic Metadata & Audio Panel
         self.meta_panel = QFrame()
         self.meta_panel.setObjectName("StudioMetadataPanel")
         self.meta_panel.setFixedWidth(300)
