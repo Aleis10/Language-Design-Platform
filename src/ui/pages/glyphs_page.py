@@ -530,11 +530,16 @@ class Glyphs_Page(QWidget):
         picker.exec()
 
     def _import_external_svg(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Import Vector SVG File", "", "Scalable Vector Graphics (*.svg)")
-        if path and os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-            self.canvas.load_svg(content)
+            dialog = QFileDialog(self, "Import Vector SVG File", "", "Scalable Vector Graphics (*.svg)")
+            dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+            dialog.setStyleSheet("QFileDialog { background: #fafafa; } QWidget { color: #222; }")
+            if dialog.exec() != QFileDialog.DialogCode.Accepted:
+                return
+            path = dialog.selectedFiles()[0]
+            if path and os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                self.canvas.load_svg(content)
 
     def save_active_glyph(self, notify: bool = True):
         if not self.active_glyph_id:
@@ -580,7 +585,12 @@ class Glyphs_Page(QWidget):
         svg_data = self.canvas.to_svg()
         name = self.input_glyph_name.text().strip() or "glyph"
         clean = re.sub(r'[^a-zA-Z0-9_\-]', '_', name.lower())
-        path, _ = QFileDialog.getSaveFileName(self, "Export Standalone SVG", f"{clean}.svg", "SVG (*.svg)")
+        dialog = QFileDialog(self, "Export Standalone SVG", f"{clean}.svg", "SVG (*.svg)")
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setStyleSheet("QFileDialog { background: #fafafa; } QWidget { color: #222; }")
+        if dialog.exec() != QFileDialog.DialogCode.Accepted:
+            return
+        path = dialog.selectedFiles()[0]
         if path:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(svg_data)

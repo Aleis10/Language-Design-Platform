@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QLabel, QScrollArea, QFormLayout, QMessageBox, QDialog, QListWidget, QListWidgetItem
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 
 
 class Overview_Page(QWidget):
@@ -74,7 +75,7 @@ class Overview_Page(QWidget):
         details_layout = QVBoxLayout(details_card)
         details_layout.setContentsMargins(16, 16, 16, 16)
 
-        sec1_title = QLabel("[icon:details] Language Details")
+        sec1_title = QLabel("Language Details")
         sec1_title.setProperty("class", "section-title")
         details_layout.addWidget(sec1_title)
 
@@ -131,7 +132,7 @@ class Overview_Page(QWidget):
         history_card.setProperty("class", "overview-card")
         h_layout = QVBoxLayout(history_card)
         h_layout.setContentsMargins(16, 12, 16, 12)
-        h_title = QLabel("[icon:history] History & Origins")
+        h_title = QLabel("History & Origins")
         h_title.setProperty("class", "section-title")
         self.text_history = AutoResizingTextEdit()
         self.text_history.setPlaceholderText("Describe the historical origins and evolution of the language...")
@@ -145,7 +146,7 @@ class Overview_Page(QWidget):
         culture_card.setProperty("class", "overview-card")
         c_layout = QVBoxLayout(culture_card)
         c_layout.setContentsMargins(16, 12, 16, 12)
-        c_title = QLabel("[icon:culture] Cultural Background & Usage")
+        c_title = QLabel("Cultural Background & Usage")
         c_title.setProperty("class", "section-title")
         self.text_culture = AutoResizingTextEdit()
         self.text_culture.setPlaceholderText("Describe cultural context, registers, societal usage, or idioms...")
@@ -329,9 +330,11 @@ class Custom_Card(QFrame):
         self.title_label.setProperty("class", "section-title")
 
         # Header (Rename, Collapse & Delete)
-        self.btn_rename = QPushButton("[icon:edit]")
-        self.btn_collapse = QPushButton("[icon:collapse]")
-        self.btn_delete = QPushButton("[icon:delete]")
+        self.btn_rename = QPushButton()
+        self.btn_rename.setIcon(QIcon("/home/pranav/Documents/Collage_R/code/Python/Lexicography/Language-Design-Platform/assets/icons/edit.svg"))
+        self.btn_collapse = QPushButton("▼")
+        self.btn_delete = QPushButton()
+        self.btn_delete.setIcon(QIcon("/home/pranav/Documents/Collage_R/code/Python/Lexicography/Language-Design-Platform/assets/icons/Trash.svg"))
 
         for btn in (self.btn_rename, self.btn_collapse, self.btn_delete):
             btn.setFixedSize(28, 28)
@@ -432,7 +435,7 @@ class Custom_Card(QFrame):
     def toggle_collapse(self):
         self.is_collapsed = not self.is_collapsed
         self.content_widget.setVisible(not self.is_collapsed)
-        self.btn_collapse.setText("[icon:expand]" if self.is_collapsed else "[icon:collapse]")
+        self.btn_collapse.setText("▲" if self.is_collapsed else "▼")
 
     def delete_card(self):
         reply = QMessageBox.question(

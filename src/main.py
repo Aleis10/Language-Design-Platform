@@ -9,6 +9,8 @@ from ui.frontend_main import MainWindow
 from database.db_Manager import Database_Manager
 from database.overview_db import LanguageOverviewRepository
 from database.glyph_db import GlyphRepository
+from database.lexicon_db import LexiconRepository
+from database.keyboard_db import KeyboardRepository
 from database.archive_manager import ProjectArchiveManager
 
 
@@ -44,6 +46,8 @@ def main():
             db_manager = Database_Manager(db_path)
             overview_repo = LanguageOverviewRepository(db_manager)
             glyph_repo = GlyphRepository(db_manager)
+            lexicon_repo = LexiconRepository(db_manager)
+            keyboard_repo = KeyboardRepository(db_manager)
             language_id = overview_repo.create_initial_language(project_name)
             # Create initial packaged .langarc
             ProjectArchiveManager.save_archive(session_dir, archive_path, project_name)
@@ -54,6 +58,8 @@ def main():
             db_manager = Database_Manager(db_path)
             overview_repo = LanguageOverviewRepository(db_manager)
             glyph_repo = GlyphRepository(db_manager)
+            lexicon_repo = LexiconRepository(db_manager)
+            keyboard_repo = KeyboardRepository(db_manager)
             language_id = overview_repo.get_primary_language_id()
             if not language_id:
                 language_id = overview_repo.create_initial_language(project_name)
@@ -65,6 +71,8 @@ def main():
         db_manager = Database_Manager(db_path)
         overview_repo = LanguageOverviewRepository(db_manager)
         glyph_repo = GlyphRepository(db_manager)
+        lexicon_repo = LexiconRepository(db_manager)
+        keyboard_repo = KeyboardRepository(db_manager)
 
         if is_new_project:
             language_id = overview_repo.create_initial_language(project_name)
@@ -82,6 +90,8 @@ def main():
         db_manager=db_manager,
         overview_repo=overview_repo,
         glyph_repo=glyph_repo,
+        lexicon_repo=lexicon_repo,
+        keyboard_repo=keyboard_repo,
         language_id=language_id,
         db_path=db_path,
         project_name=project_name,

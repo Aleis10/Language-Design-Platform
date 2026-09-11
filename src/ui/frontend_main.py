@@ -9,12 +9,18 @@ from PySide6.QtCore import Qt
 from .components.coll_sidebar import Sidebar
 from .pages.overview import Overview_Page
 from .pages.glyphs_page import Glyphs_Page
+from .pages.lexicon_page import LexiconPage
+from .pages.keyboard_page import KeyboardPage
 
 try:
     from database.glyph_db import GlyphRepository
+    from database.lexicon_db import LexiconRepository
+    from database.keyboard_db import KeyboardRepository
     from database.archive_manager import ProjectArchiveManager
 except (ImportError, ValueError):
     from ..database.glyph_db import GlyphRepository
+    from ..database.lexicon_db import LexiconRepository
+    from ..database.keyboard_db import KeyboardRepository
     from ..database.archive_manager import ProjectArchiveManager
 
 
@@ -24,6 +30,8 @@ class MainWindow(QMainWindow):
         db_manager=None,
         overview_repo=None,
         glyph_repo=None,
+        lexicon_repo=None,
+        keyboard_repo=None,
         language_id=None,
         db_path=None,
         project_name=None,
@@ -37,6 +45,8 @@ class MainWindow(QMainWindow):
         self.db_manager = db_manager
         self.overview_repo = overview_repo
         self.glyph_repo = glyph_repo or (GlyphRepository(self.db_manager) if self.db_manager else None)
+        self.lexicon_repo = lexicon_repo or (LexiconRepository(self.db_manager) if self.db_manager else None)
+        self.keyboard_repo = keyboard_repo or (KeyboardRepository(self.db_manager) if self.db_manager else None)
         self.language_id = language_id
         self.db_path = db_path
         self.project_name = project_name
@@ -67,13 +77,23 @@ class MainWindow(QMainWindow):
             db_path=self.db_path,
             session_dir=self.session_dir,
         )
+        self.lexicon_page = LexiconPage(
+            lexicon_repo=self.lexicon_repo,
+            language_id=self.language_id,
+            session_dir=self.session_dir,
+        )
+        self.keyboard_page = KeyboardPage(
+            keyboard_repo=self.keyboard_repo,
+            glyph_repo=self.glyph_repo,
+            language_id=self.language_id,
+        )
 
         self.pages = QStackedWidget()
         self.pages.addWidget(QLabel("Dashboard", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(self.overview_page)
         self.pages.addWidget(self.glyphs_page)
-        self.pages.addWidget(QLabel("Keyboard", alignment=Qt.AlignmentFlag.AlignCenter))
-        self.pages.addWidget(QLabel("Lexicon Page", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(self.keyboard_page)
+        self.pages.addWidget(self.lexicon_page)
         self.pages.addWidget(QLabel("Grammar Page", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(QLabel("Settings Page", alignment=Qt.AlignmentFlag.AlignCenter))
 
@@ -149,11 +169,11 @@ class MainWindow(QMainWindow):
         """Packs a copy of the current project to a new .langarc destination."""
         clean_name = self.project_name.lower().replace(" ", "_") if self.project_name else "language"
         default_file = f"{clean_name}.langarc"
-        new_path, _ = QFileDialog.getSaveFileName(
-            self, "Save Copy As", default_file,
-            "Language Archive (*.langarc);;Zip Archive (*.zip);;All Files (*)"
-        )
-        if new_path:
+        dialog = QFileDialog(self, "Save Copy As", default_file, "Language Archive (*.langarc);;Zip Archive (*.zip);;All Files (*)")
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setStyleSheet("QFileDialog { background: #fafafa; } QWidget { color: #222; }")
+        if dialog.exec() == QFileDialog.DialogCode.Accepted:
+            new_path = dialog.selectedFiles()[0]
             try:
                 self.archive_manager.save_archive(
                     self.session_dir, new_path, self.project_name
@@ -186,10 +206,13 @@ class MainWindow(QMainWindow):
 
     def action_open_project(self):
         """Open an existing .langarc, .zip, or .db project archive."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open Language Archive", "",
-            "Language Archive (*.langarc *.zip);;SQLite Database (*.db);;All Files (*)"
-        )
+        dialog = QFileDialog(self, "Open Language Archive", "",
+            "Language Archive (*.langarc *.zip);;SQLite Database (*.db);;All Files (*)")
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setStyleSheet("QFileDialog { background: #fafafa; } QWidget { color: #222; }")
+        if dialog.exec() != QFileDialog.DialogCode.Accepted:
+            return
+        file_path = dialog.selectedFiles()[0]
         if not file_path:
             return
 
@@ -230,6 +253,8 @@ class MainWindow(QMainWindow):
                 self.db_manager = Database_Manager(db_path)
                 self.overview_repo = LanguageOverviewRepository(self.db_manager)
                 self.glyph_repo = GlyphRepository(self.db_manager)
+                self.lexicon_repo = LexiconRepository(self.db_manager)
+                self.keyboard_repo = KeyboardRepository(self.db_manager)
                 self.language_id = self.overview_repo.create_initial_language(project_name)
                 self.session_dir = session_dir
                 self.archive_manager.save_archive(session_dir, archive_or_db_path, project_name)
@@ -241,6 +266,8 @@ class MainWindow(QMainWindow):
                 self.db_manager = Database_Manager(db_path)
                 self.overview_repo = LanguageOverviewRepository(self.db_manager)
                 self.glyph_repo = GlyphRepository(self.db_manager)
+                self.lexicon_repo = LexiconRepository(self.db_manager)
+                self.keyboard_repo = KeyboardRepository(self.db_manager)
                 self.language_id = self.overview_repo.get_primary_language_id()
                 if not self.language_id:
                     self.language_id = self.overview_repo.create_initial_language(project_name)
@@ -251,6 +278,8 @@ class MainWindow(QMainWindow):
             self.db_manager = Database_Manager(self.db_path)
             self.overview_repo = LanguageOverviewRepository(self.db_manager)
             self.glyph_repo = GlyphRepository(self.db_manager)
+            self.lexicon_repo = LexiconRepository(self.db_manager)
+            self.keyboard_repo = KeyboardRepository(self.db_manager)
             if is_new_project:
                 self.language_id = self.overview_repo.create_initial_language(project_name)
             else:
@@ -277,11 +306,21 @@ class MainWindow(QMainWindow):
             db_path=self.db_path,
             session_dir=self.session_dir,
         )
+        self.lexicon_page = LexiconPage(
+            lexicon_repo=self.lexicon_repo,
+            language_id=self.language_id,
+            session_dir=self.session_dir,
+        )
+        self.keyboard_page = KeyboardPage(
+            keyboard_repo=self.keyboard_repo,
+            glyph_repo=self.glyph_repo,
+            language_id=self.language_id,
+        )
         self.pages.addWidget(QLabel("Dashboard", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(self.overview_page)
         self.pages.addWidget(self.glyphs_page)
-        self.pages.addWidget(QLabel("Keyboard", alignment=Qt.AlignmentFlag.AlignCenter))
-        self.pages.addWidget(QLabel("Lexicon Page", alignment=Qt.AlignmentFlag.AlignCenter))
+        self.pages.addWidget(self.keyboard_page)
+        self.pages.addWidget(self.lexicon_page)
         self.pages.addWidget(QLabel("Grammar Page", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(QLabel("Settings Page", alignment=Qt.AlignmentFlag.AlignCenter))
         self.statusBar().showMessage(f"Loaded: {self.project_name}", 4000)

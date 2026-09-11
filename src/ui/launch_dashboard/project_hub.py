@@ -116,14 +116,26 @@ class ProjectHub(QDialog):
                 self.setStyleSheet(f.read())
 
     def _browse_save_location(self):
-        suggested_name = self.input_name.text().strip().lower().replace(" ", "_") or "untitled_language"
-        default_file = f"{suggested_name}.langarc"
-        
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Select Project Archive Location", default_file, "Language Archive (*.langarc);;Zip Archive (*.zip);;SQLite Database (*.db)"
-        )
-        if file_path:
-            self.input_path.setText(file_path)
+            suggested_name = self.input_name.text().strip().lower().replace(" ", "_") or "untitled_language"
+            default_file = f"{suggested_name}.langarc"
+
+            dialog = QFileDialog(self, "Select Project Archive Location", default_file,
+                "Language Archive (*.langarc);;Zip Archive (*.zip);;SQLite Database (*.db)")
+            dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+            dialog.setStyleSheet(
+                "QFileDialog { background-color: #1a1a1a; color: #ffffff; }"
+                "QFileDialog QLabel { color: #ffffff; }"
+                "QFileDialog QLineEdit { background-color: #2a2a2a; color: #ffffff; border: 1px solid #444; }"
+                "QFileDialog QTreeView, QFileDialog QListView, QFileDialog QTableView { background-color: #222222; color: #ffffff; }"
+                "QFileDialog QComboBox { background-color: #2a2a2a; color: #ffffff; }"
+                "QFileDialog QPushButton { background-color: #333333; color: #ffffff; border: 1px solid #555; padding: 4px 10px; }"
+                "QFileDialog QPushButton:hover { background-color: #444444; }"
+            )
+            if dialog.exec() != QFileDialog.DialogCode.Accepted:
+                return
+            file_path = dialog.selectedFiles()[0]
+            if file_path:
+                self.input_path.setText(file_path)
 
     def _handle_create_project(self):
         name = self.input_name.text().strip()
@@ -142,9 +154,21 @@ class ProjectHub(QDialog):
         self.accept()
 
     def _handle_open_existing(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open Language Project Archive", "", "Language Archive (*.langarc *.zip);;SQLite Database (*.db);;All Files (*)"
+        dialog = QFileDialog(self, "Open Language Project Archive", "",
+            "Language Archive (*.langarc *.zip);;SQLite Database (*.db);;All Files (*)")
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setStyleSheet(
+            "QFileDialog { background-color: #1a1a1a; color: #ffffff; }"
+            "QFileDialog QLabel { color: #ffffff; }"
+            "QFileDialog QLineEdit { background-color: #2a2a2a; color: #ffffff; border: 1px solid #444; }"
+            "QFileDialog QTreeView, QFileDialog QListView, QFileDialog QTableView { background-color: #222222; color: #ffffff; }"
+            "QFileDialog QComboBox { background-color: #2a2a2a; color: #ffffff; }"
+            "QFileDialog QPushButton { background-color: #333333; color: #ffffff; border: 1px solid #555; padding: 4px 10px; }"
+            "QFileDialog QPushButton:hover { background-color: #444444; }"
         )
+        if dialog.exec() != QFileDialog.DialogCode.Accepted:
+            return
+        file_path = dialog.selectedFiles()[0]
         if file_path:
             self.selected_db_path = file_path
             self.project_name = os.path.splitext(os.path.basename(file_path))[0].replace("_", " ").title()

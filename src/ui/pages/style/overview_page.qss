@@ -81,25 +81,25 @@ QPushButton#BtnSaveOverview:hover {
 }
 
 QDialog {
-    background-color: #1e1e1e;
+    background-color: #fbfbfb;
 }
 
 /* Dialog Form Labels (Section Title / Section Type) */
 QDialog QLabel {
-    color: #ffffff;
+    color: #111111;
     font-weight: bold;
 }
 
-/* Cancel Button */
+/* Dialog Buttons */
 QDialog QPushButton {
-    color: #ffffff;
-    background-color: #3a3a3a;
-    border: 1px solid #555555;
+    color: #222222;
+    background-color: #f0f0f0;
+    border: 1px solid #cccccc;
     padding: 6px 14px;
     border-radius: 4px;
 }
 QDialog QPushButton:hover {
-    background-color: #4a4a4a;
+    background-color: #e5e5e5;
 }
 
 /* Card Control Buttons (Edit, Collapse, Delete) */

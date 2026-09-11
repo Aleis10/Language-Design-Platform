@@ -11,7 +11,7 @@ class nav_button(QPushButton):
         self.full_text = text
 
         self.setIcon(QIcon(icon_path))
-        self.setIconSize(QSize(20,20))
+        self.setIconSize(QSize(24, 24))
 
         self.setFlat(True)
         self.setCheckable(True)
