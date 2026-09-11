@@ -1,0 +1,79 @@
+/* Lexicon Page Stylesheet */
+
+/* Header */
+QLabel#LexTitle {
+    font-size: 16px;
+    font-weight: bold;
+    color: #111111;
+}
+
+QPushButton#LexDelete {
+    color: #c0392b;
+}
+
+QLabel#LexCount {
+    color: #666666;
+    font-size: 12px;
+    padding-left: 4px;
+}
+
+/* Table */
+QTableWidget#LexTable {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    alternate-background-color: #f7f9fb;
+    gridline-color: #e8eaed;
+    selection-background-color: #e3f0ff;
+    selection-color: #111111;
+}
+QTableWidget#LexTable::item {
+    padding: 6px 8px;
+    color: #111111;
+}
+QTableWidget#LexTable QHeaderView::section {
+    background-color: #f0f2f5;
+    border: none;
+    border-bottom: 1px solid #dcdcdc;
+    padding: 6px 8px;
+    font-weight: bold;
+    color: #333333;
+}
+
+/* Audio variant list in dialog */
+QListWidget#LexAudioList {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+}
+
+/* Add/Edit dialog */
+QDialog {
+    background-color: #ffffff;
+}
+QDialog QLabel {
+    color: #222222;
+}
+QDialog QLineEdit, QDialog QPlainTextEdit, QDialog QComboBox {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 6px 8px;
+    color: #111111;
+}
+
+/* Audio variant buttons */
+QPushButton#LexAudioBtn {
+    background-color: #f2f2f2;
+    color: #333333;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+QPushButton#LexAudioBtn:hover {
+    background-color: #e5e5e5;
+}
+QPushButton#LexAudioBtnRemove {
+    color: #c0392b;
+}

@@ -1,0 +1,90 @@
+/* Keyboard Page Stylesheet */
+
+/* Header */
+QLabel#KbdTitle {
+    font-size: 16px;
+    font-weight: bold;
+    color: #111111;
+}
+
+QLabel#KbdCount {
+    color: #666666;
+    font-size: 12px;
+}
+
+QLabel#KbdHint {
+    color: #777777;
+    font-size: 11px;
+}
+
+QPushButton#KbdDeletePreset {
+    color: #c0392b;
+}
+
+/* Keyboard Board Area */
+QWidget#KbdBoard {
+    background-color: #f5f5f5;
+    border-radius: 8px;
+}
+
+QScrollArea#KbdScroll {
+    border: none;
+    background: transparent;
+}
+
+/* Key Caps (universal objectName selectors for QPushButton & QToolButton) */
+#KeyCapEmpty {
+    background: #ffffff;
+    border: 1px solid #c8c8c8;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #333333;
+    padding: 4px;
+}
+#KeyCapEmpty:hover {
+    background: #eef4fd;
+}
+
+#KeyCapAssigned {
+    background: #e3f0ff;
+    border: 1px solid #4a90d9;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #1a4d87;
+    padding: 4px;
+}
+#KeyCapAssigned:hover {
+    background: #d0e5fb;
+}
+
+#KeyCapStatic {
+    background: #ececec;
+    color: #8a8a8a;
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+    font-size: 11px;
+    padding: 4px;
+}
+
+/* Dialogs (cascade from page to modal children) */
+QDialog {
+    background-color: #ffffff;
+}
+QDialog QLabel {
+    color: #222222;
+}
+QDialog QLineEdit {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 6px 8px;
+    color: #111111;
+}
+QDialog QComboBox {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 4px;
+    color: #111111;
+}

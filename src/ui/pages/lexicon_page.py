@@ -67,6 +67,7 @@ class _EntryDialog(QDialog):
         form.addRow(lbl_audio)
 
         self.audio_list = QListWidget()
+        self.audio_list.setObjectName("LexAudioList")
         self.audio_list.setMaximumHeight(120)
         self.audio_list.itemSelectionChanged.connect(self._on_audio_select)
         form.addRow(self.audio_list)
@@ -86,10 +87,13 @@ class _EntryDialog(QDialog):
 
         audio_btns = QHBoxLayout()
         btn_add_audio = QPushButton("Add Variant")
+        btn_add_audio.setObjectName("LexAudioBtn")
         btn_add_audio.clicked.connect(self._add_variant)
         btn_update_audio = QPushButton("Update Selected")
+        btn_update_audio.setObjectName("LexAudioBtn")
         btn_update_audio.clicked.connect(self._update_variant)
         btn_remove_audio = QPushButton("Remove Selected")
+        btn_remove_audio.setObjectName("LexAudioBtnRemove")
         btn_remove_audio.clicked.connect(self._remove_variant)
         audio_btns.addWidget(btn_add_audio)
         audio_btns.addWidget(btn_update_audio)
@@ -237,7 +241,14 @@ class LexiconPage(QWidget):
         os.makedirs(self.audio_dir, exist_ok=True)
 
         self._build_ui()
+        self._load_stylesheet()
         self.refresh_table()
+
+    def _load_stylesheet(self):
+        style_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "lexicon_page.qss")
+        if os.path.exists(style_path):
+            with open(style_path, "r", encoding="utf-8") as f:
+                self.setStyleSheet(f.read())
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -247,7 +258,7 @@ class LexiconPage(QWidget):
         # Top bar: title + add/edit/delete (left) + search (right)
         top = QHBoxLayout()
         lbl = QLabel("Lexicon & Dictionary")
-        lbl.setStyleSheet("font-size: 16px; font-weight: bold;")
+        lbl.setObjectName("LexTitle")
         top.addWidget(lbl)
         top.addSpacing(12)
 
@@ -260,7 +271,7 @@ class LexiconPage(QWidget):
         top.addWidget(btn_edit)
 
         btn_delete = QPushButton("Delete")
-        btn_delete.setStyleSheet("color: #c0392b;")
+        btn_delete.setObjectName("LexDelete")
         btn_delete.clicked.connect(self._delete_entry)
         top.addWidget(btn_delete)
 
@@ -275,8 +286,9 @@ class LexiconPage(QWidget):
 
         # Table (scrollable, shows all data)
         self.table = QTableWidget()
+        self.table.setObjectName("LexTable")
         self.table.setColumnCount(8)
-        self.table.setHorizontalHeaderLabels(["Headword", "IPA", "POS", "Meaning", "English", "Audio Variants", "Description", "ID"])
+        self.table.setHorizontalHeaderLabels(["Headword", "IPA", "POS", "Meaning", "English", "Audio", "Description", "ID"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
@@ -291,7 +303,7 @@ class LexiconPage(QWidget):
 
         # Entry count footer
         self.lbl_count = QLabel("0 entries")
-        self.lbl_count.setStyleSheet("color: #666; padding-left: 4px;")
+        self.lbl_count.setObjectName("LexCount")
         root.addWidget(self.lbl_count)
 
     def refresh_table(self):

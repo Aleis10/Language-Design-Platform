@@ -11,6 +11,7 @@ from database.overview_db import LanguageOverviewRepository
 from database.glyph_db import GlyphRepository
 from database.lexicon_db import LexiconRepository
 from database.keyboard_db import KeyboardRepository
+from database.grammar_db import GrammarRepository
 from database.archive_manager import ProjectArchiveManager
 
 
@@ -48,6 +49,7 @@ def main():
             glyph_repo = GlyphRepository(db_manager)
             lexicon_repo = LexiconRepository(db_manager)
             keyboard_repo = KeyboardRepository(db_manager)
+            grammar_repo = GrammarRepository(db_manager)
             language_id = overview_repo.create_initial_language(project_name)
             # Create initial packaged .langarc
             ProjectArchiveManager.save_archive(session_dir, archive_path, project_name)
@@ -60,6 +62,7 @@ def main():
             glyph_repo = GlyphRepository(db_manager)
             lexicon_repo = LexiconRepository(db_manager)
             keyboard_repo = KeyboardRepository(db_manager)
+            grammar_repo = GrammarRepository(db_manager)
             language_id = overview_repo.get_primary_language_id()
             if not language_id:
                 language_id = overview_repo.create_initial_language(project_name)
@@ -73,6 +76,7 @@ def main():
         glyph_repo = GlyphRepository(db_manager)
         lexicon_repo = LexiconRepository(db_manager)
         keyboard_repo = KeyboardRepository(db_manager)
+        grammar_repo = GrammarRepository(db_manager)
 
         if is_new_project:
             language_id = overview_repo.create_initial_language(project_name)
@@ -92,6 +96,7 @@ def main():
         glyph_repo=glyph_repo,
         lexicon_repo=lexicon_repo,
         keyboard_repo=keyboard_repo,
+        grammar_repo=grammar_repo,
         language_id=language_id,
         db_path=db_path,
         project_name=project_name,

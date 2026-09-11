@@ -122,15 +122,6 @@ class ProjectHub(QDialog):
             dialog = QFileDialog(self, "Select Project Archive Location", default_file,
                 "Language Archive (*.langarc);;Zip Archive (*.zip);;SQLite Database (*.db)")
             dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-            dialog.setStyleSheet(
-                "QFileDialog { background-color: #1a1a1a; color: #ffffff; }"
-                "QFileDialog QLabel { color: #ffffff; }"
-                "QFileDialog QLineEdit { background-color: #2a2a2a; color: #ffffff; border: 1px solid #444; }"
-                "QFileDialog QTreeView, QFileDialog QListView, QFileDialog QTableView { background-color: #222222; color: #ffffff; }"
-                "QFileDialog QComboBox { background-color: #2a2a2a; color: #ffffff; }"
-                "QFileDialog QPushButton { background-color: #333333; color: #ffffff; border: 1px solid #555; padding: 4px 10px; }"
-                "QFileDialog QPushButton:hover { background-color: #444444; }"
-            )
             if dialog.exec() != QFileDialog.DialogCode.Accepted:
                 return
             file_path = dialog.selectedFiles()[0]
@@ -157,15 +148,6 @@ class ProjectHub(QDialog):
         dialog = QFileDialog(self, "Open Language Project Archive", "",
             "Language Archive (*.langarc *.zip);;SQLite Database (*.db);;All Files (*)")
         dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-        dialog.setStyleSheet(
-            "QFileDialog { background-color: #1a1a1a; color: #ffffff; }"
-            "QFileDialog QLabel { color: #ffffff; }"
-            "QFileDialog QLineEdit { background-color: #2a2a2a; color: #ffffff; border: 1px solid #444; }"
-            "QFileDialog QTreeView, QFileDialog QListView, QFileDialog QTableView { background-color: #222222; color: #ffffff; }"
-            "QFileDialog QComboBox { background-color: #2a2a2a; color: #ffffff; }"
-            "QFileDialog QPushButton { background-color: #333333; color: #ffffff; border: 1px solid #555; padding: 4px 10px; }"
-            "QFileDialog QPushButton:hover { background-color: #444444; }"
-        )
         if dialog.exec() != QFileDialog.DialogCode.Accepted:
             return
         file_path = dialog.selectedFiles()[0]

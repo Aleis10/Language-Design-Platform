@@ -29,22 +29,6 @@ QWERTY_ROWS = [
 
 NON_ASSIGNABLE = {"Tab", "Caps", "Shift", "Enter", "Backspace", " ", "      "}
 
-# Light, standard app theme for keys
-EMPTY_KEY_QSS = (
-    "QPushButton { background: #ffffff; border: 1px solid #c8c8c8; border-radius: 6px; "
-    "font-size: 13px; color: #333333; padding: 4px; }"
-    "QPushButton:hover { background: #eef4fd; }"
-)
-ASSIGNED_QSS = (
-    "QPushButton { background: #e3f0ff; border: 1px solid #4a90d9; border-radius: 6px; "
-    "font-size: 13px; font-weight: bold; color: #1a4d87; padding: 4px; }"
-    "QPushButton:hover { background: #d0e5fb; }"
-)
-STATIC_KEY_QSS = (
-    "QPushButton { background: #ececec; color: #8a8a8a; border: 1px solid #d0d0d0; "
-    "border-radius: 6px; font-size: 11px; padding: 4px; }"
-)
-
 
 def _render_glyph_icon(svg_data: str, size: int = 40) -> Optional[QIcon]:
     """Render an SVG glyph string into a QIcon for display on key buttons."""
@@ -143,6 +127,12 @@ class KeyboardPage(QWidget):
         self._build_ui()
         self.load_presets()
 
+    def _load_stylesheet(self):
+        style_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "keyboard_page.qss")
+        if os.path.exists(style_path):
+            with open(style_path, "r", encoding="utf-8") as f:
+                self.setStyleSheet(f.read())
+
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 20)
@@ -151,7 +141,7 @@ class KeyboardPage(QWidget):
         # Header: title + preset controls
         header = QHBoxLayout()
         lbl = QLabel("Keyboard Layout Mapper")
-        lbl.setStyleSheet("font-size: 16px; font-weight: bold;")
+        lbl.setObjectName("KbdTitle")
         header.addWidget(lbl)
 
         header.addSpacing(16)
@@ -171,7 +161,7 @@ class KeyboardPage(QWidget):
         header.addWidget(btn_rename_preset)
 
         btn_delete_preset = QPushButton("Delete")
-        btn_delete_preset.setStyleSheet("color: #c0392b;")
+        btn_delete_preset.setObjectName("KbdDeletePreset")
         btn_delete_preset.clicked.connect(self._delete_preset)
         header.addWidget(btn_delete_preset)
 
@@ -181,7 +171,7 @@ class KeyboardPage(QWidget):
         # Second tool row: mapped count + clear all
         toolbar = QHBoxLayout()
         self.lbl_count = QLabel("0 keys mapped")
-        self.lbl_count.setStyleSheet("color: #666;")
+        self.lbl_count.setObjectName("KbdCount")
         toolbar.addWidget(self.lbl_count)
         toolbar.addStretch()
         btn_clear = QPushButton("Clear All")
@@ -190,12 +180,12 @@ class KeyboardPage(QWidget):
         root.addLayout(toolbar)
 
         hint = QLabel("Click a key to assign a character, Unicode PPUA code, or glyph. Create presets for alternate layouts.")
-        hint.setStyleSheet("color: #777;")
+        hint.setObjectName("KbdHint")
         root.addWidget(hint)
 
         # Keyboard board
         self.board_container = QWidget()
-        self.board_container.setStyleSheet("background-color: #f5f5f5; border-radius: 8px;")
+        self.board_container.setObjectName("KbdBoard")
         self.grid = QVBoxLayout(self.board_container)
         self.grid.setSpacing(5)
         for row in QWERTY_ROWS:
@@ -206,12 +196,11 @@ class KeyboardPage(QWidget):
                 btn.setMinimumHeight(44)
                 if key in NON_ASSIGNABLE or key in (" ", "      "):
                     btn.setText("SPACE" if key in (" ", "      ") else key)
-                    btn.setStyleSheet(STATIC_KEY_QSS)
+                    btn.setObjectName("KeyCapStatic")
                     btn.setEnabled(False)
                 else:
                     btn.setText(key)
-                    btn.setObjectName("KeyCap")
-                    btn.setStyleSheet(EMPTY_KEY_QSS)
+                    btn.setObjectName("KeyCapEmpty")
                     btn.setProperty("keyCode", key)
                     btn.clicked.connect(self._on_key_clicked)
                     self._key_buttons[key] = btn
@@ -222,8 +211,10 @@ class KeyboardPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.board_container)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.setObjectName("KbdScroll")
         root.addWidget(scroll, stretch=1)
+
+        self._load_stylesheet()
 
     # ---- Presets ----
 
@@ -338,6 +329,11 @@ class KeyboardPage(QWidget):
 
     # ---- Refresh ----
 
+    def _set_key_style(self, btn, object_name: str):
+        btn.setObjectName(object_name)
+        btn.style().unpolish(btn)
+        btn.style().polish(btn)
+
     def refresh(self):
         if not self._current_preset_id:
             return
@@ -350,7 +346,7 @@ class KeyboardPage(QWidget):
             m = mappings.get(key_code)
             if m and (m.get("assignment") or m.get("glyph_id")):
                 mapped += 1
-                btn.setStyleSheet(ASSIGNED_QSS)
+                self._set_key_style(btn, "KeyCapAssigned")
                 # Show glyph icon (preferred) or assigned character
                 if m.get("glyph_id"):
                     glyph = self.keyboard_repo.get_glyph(m["glyph_id"])
@@ -370,7 +366,7 @@ class KeyboardPage(QWidget):
                     + (f"  {m.get('ppua')}" if m.get("ppua") else "")
                 )
             else:
-                btn.setStyleSheet(EMPTY_KEY_QSS)
+                self._set_key_style(btn, "KeyCapEmpty")
                 btn.setText(key_code)
                 btn.setIcon(QIcon())
                 btn.setToolTip("")
