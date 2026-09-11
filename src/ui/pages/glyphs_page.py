@@ -16,11 +16,13 @@ try:
     from ui.components.glyph_canvas import GlyphCanvasWidget, CanvasStudioToolBar
     from ui.components.glyph_audio import GlyphAudioWidget
     from ui.components.ipa_picker import IPAPickerDialog
+    from font_tools.font_registry import get_fonts_dir, register_language_font
 except (ImportError, ValueError):
     from ...database.glyph_db import GlyphRepository
     from ..components.glyph_canvas import GlyphCanvasWidget, CanvasStudioToolBar
     from ..components.glyph_audio import GlyphAudioWidget
     from ..components.ipa_picker import IPAPickerDialog
+    from ...font_tools.font_registry import get_fonts_dir, register_language_font
 
 
 def get_base_data_dir() -> str:
@@ -151,10 +153,19 @@ class Glyphs_Page(QWidget):
         btn_add_group.setObjectName("BtnAddGroup")
         btn_add_group.clicked.connect(self.prompt_add_group)
 
+        btn_export_font = QPushButton("⬇ Export Font")
+        btn_export_font.setObjectName("BtnExportFont")
+        btn_export_font.setToolTip(
+            "Build a TrueType font from all glyphs (mapped to U+E000+) "
+            "so you can type them in the Lexicon."
+        )
+        btn_export_font.clicked.connect(self.export_font)
+
         tb_layout.addWidget(lbl_title)
         tb_layout.addSpacing(16)
         tb_layout.addWidget(self.input_search)
         tb_layout.addStretch()
+        tb_layout.addWidget(btn_export_font)
         tb_layout.addWidget(btn_add_group)
 
         gallery_layout.addWidget(top_bar)
@@ -600,6 +611,39 @@ class Glyphs_Page(QWidget):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(svg_data)
             QMessageBox.information(self, "Exported", f"Exported vector file to:\n{path}")
+
+    def export_font(self):
+        """Build a TrueType font from all glyphs in this language (PPUA U+E000+)."""
+        from font_tools.export_service import export_language_font
+
+        glyphs = self.glyph_repo.get_all_glyphs(self.language_id)
+        with_strokes = [g for g in glyphs if (g.get("svg_data") or "").strip()]
+        if not with_strokes:
+            QMessageBox.information(
+                self, "Export Font",
+                "No glyphs with drawings found yet.\n"
+                "Draw at least one logogram, then export again."
+            )
+            return
+
+        fonts_dir = get_fonts_dir(self.data_dir)
+        family = "LexiLogograms"
+        result = None
+        try:
+            result = export_language_font(with_strokes, fonts_dir, family=family)
+        except Exception as e:
+            QMessageBox.critical(self, "Export Font Failed", f"Font export error:\n{e}")
+            return
+
+        # Register with Qt so the app can render the glyph characters
+        fam_name = register_language_font(self.data_dir)
+        detail = f"\n\nRegistered font family: {fam_name}" if fam_name else ""
+        QMessageBox.information(
+            self, "Font Exported",
+            f"Built {result.num_glyphs} glyphs into:\n{result.ttf_path}"
+            f"{detail}\n\nEach glyph is mapped to a Private Use Area code point "
+            f"(U+E000+). Type its character in any field using this font."
+        )
 
     def back_to_gallery(self):
         # Auto-save changes

@@ -24,7 +24,7 @@ POS_OPTIONS = ["", "NOUN", "VERB", "ADJ", "ADV", "PRON", "PREP", "CONJ", "DET", 
 class _EntryDialog(QDialog):
     """Add/Edit lexicon entry form with multiple audio variants, each with its own IPA."""
 
-    def __init__(self, parent=None, data: Optional[dict] = None, base_audio_dir: str = ""):
+    def __init__(self, parent=None, data: Optional[dict] = None, base_audio_dir: str = "", data_dir: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Edit Entry" if data else "Add Entry")
         self.setMinimumWidth(520)
@@ -32,10 +32,25 @@ class _EntryDialog(QDialog):
         self.available_audio = list(data.get("audio_variants", [])) if data else []
         self._is_edit = bool(data)
 
+        # If a conlang font is exported, the headword field uses it so PPUA
+        # glyph characters render as logograms (Latin still falls back).
+        if data_dir:
+            try:
+                from font_tools.font_registry import apply_conlang_font
+                self.data_dir = data_dir
+            except ImportError:
+                pass
+
         form = QFormLayout(self)
 
         self.input_headword = QLineEdit()
         self.input_headword.setPlaceholderText("Citation form (e.g. katana)")
+        if data_dir:
+            try:
+                from font_tools.font_registry import apply_conlang_font
+                apply_conlang_font(self.input_headword, data_dir, point_size=12)
+            except Exception:
+                pass
         form.addRow("Headword:", self.input_headword)
 
         # Primary IPA (still kept for the headword summary)
@@ -252,11 +267,17 @@ class LexiconPage(QWidget):
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
-        root.setSpacing(12)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        # Top bar: title + add/edit/delete (left) + search (right)
-        top = QHBoxLayout()
+        # Top bar (white header bar, full width)
+        top_bar = QWidget()
+        top_bar.setObjectName("LexTopBar")
+        top = QHBoxLayout(top_bar)
+        top.setContentsMargins(20, 12, 20, 12)
+        top.setSpacing(12)
+
+        # Title + add/edit/delete (left) + search (right)
         lbl = QLabel("Lexicon & Dictionary")
         lbl.setObjectName("LexTitle")
         top.addWidget(lbl)
@@ -282,9 +303,13 @@ class LexiconPage(QWidget):
         self.search_input.setFixedWidth(260)
         self.search_input.textChanged.connect(self._on_search)
         top.addWidget(self.search_input)
-        root.addLayout(top)
+        root.addWidget(top_bar)
 
         # Table (scrollable, shows all data)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(20, 16, 20, 16)
+        body_layout.setSpacing(12)
         self.table = QTableWidget()
         self.table.setObjectName("LexTable")
         self.table.setColumnCount(8)
@@ -299,12 +324,13 @@ class LexiconPage(QWidget):
         self.table.setColumnHidden(7, True)   # hide ID
         # Description shown full (column 6) — wrap for readability
         self.table.setWordWrap(True)
-        root.addWidget(self.table, stretch=1)
+        body_layout.addWidget(self.table, stretch=1)
 
         # Entry count footer
         self.lbl_count = QLabel("0 entries")
         self.lbl_count.setObjectName("LexCount")
-        root.addWidget(self.lbl_count)
+        body_layout.addWidget(self.lbl_count)
+        root.addWidget(body, stretch=1)
 
     def refresh_table(self):
         entries = (
@@ -315,7 +341,15 @@ class LexiconPage(QWidget):
         self.table.setRowCount(len(entries))
         verbs = 0
         for row, entry in enumerate(entries):
-            self.table.setItem(row, 0, QTableWidgetItem(entry.get("headword", "")))
+            hw_item = QTableWidgetItem(entry.get("headword", ""))
+            # Conlang font renders PPUA glyph chars; Latin falls back automatically
+            if hasattr(self, "data_dir") and self.data_dir:
+                try:
+                    from font_tools.font_registry import conlang_font
+                    hw_item.setFont(conlang_font(point_size=12))
+                except Exception:
+                    pass
+            self.table.setItem(row, 0, hw_item)
             self.table.setItem(row, 1, QTableWidgetItem(entry.get("ipa_reading", "")))
             self.table.setItem(row, 2, QTableWidgetItem(entry.get("part_of_speech", "")))
             self.table.setItem(row, 3, QTableWidgetItem(entry.get("meaning", "")))
@@ -357,7 +391,7 @@ class LexiconPage(QWidget):
         return None
 
     def _add_entry(self):
-        dlg = _EntryDialog(self, base_audio_dir=self.audio_dir)
+        dlg = _EntryDialog(self, base_audio_dir=self.audio_dir, data_dir=self.data_dir)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             data = dlg.get_data()
             entry_id = self.lexicon_repo.add_entry(
@@ -385,7 +419,7 @@ class LexiconPage(QWidget):
         if not entry:
             QMessageBox.information(self, "No selection", "Select a row to edit.")
             return
-        dlg = _EntryDialog(self, data=entry, base_audio_dir=self.audio_dir)
+        dlg = _EntryDialog(self, data=entry, base_audio_dir=self.audio_dir, data_dir=self.data_dir)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             data = dlg.get_data()
             # Update core fields

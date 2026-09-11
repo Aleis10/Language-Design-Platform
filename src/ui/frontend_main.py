@@ -59,6 +59,14 @@ class MainWindow(QMainWindow):
         self.session_dir = session_dir
         self.archive_manager = archive_manager or ProjectArchiveManager
 
+        # Register any exported conlang font so PPUA glyph chars render
+        if self.session_dir:
+            try:
+                from font_tools.font_registry import register_language_font
+                register_language_font(self.session_dir)
+            except Exception:
+                pass
+
         self._update_window_title()
         self.resize(1400, 950)
 
@@ -98,13 +106,11 @@ class MainWindow(QMainWindow):
         )
 
         self.pages = QStackedWidget()
-        self.pages.addWidget(QLabel("Dashboard", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(self.overview_page)
         self.pages.addWidget(self.glyphs_page)
         self.pages.addWidget(self.keyboard_page)
         self.pages.addWidget(self.lexicon_page)
         self.pages.addWidget(self.grammar_page)
-        self.pages.addWidget(QLabel("Settings Page", alignment=Qt.AlignmentFlag.AlignCenter))
 
         # Sidebar
         self.sidebar = Sidebar(on_page_changed_callback=self.pages.setCurrentIndex)
@@ -304,6 +310,14 @@ class MainWindow(QMainWindow):
 
     def _rebuild_pages(self):
         """Rebuild the stacked pages against freshly loaded repositories."""
+        # Register the exported conlang font (PPUA glyph chars render in text fields)
+        if self.session_dir:
+            try:
+                from font_tools.font_registry import register_language_font
+                register_language_font(self.session_dir)
+            except Exception:
+                pass
+
         layout = self.pages if getattr(self, "pages", None) else None
         while self.pages.count():
             self.pages.removeWidget(self.pages.widget(0))
@@ -330,13 +344,11 @@ class MainWindow(QMainWindow):
             grammar_repo=self.grammar_repo,
             language_id=self.language_id,
         )
-        self.pages.addWidget(QLabel("Dashboard", alignment=Qt.AlignmentFlag.AlignCenter))
         self.pages.addWidget(self.overview_page)
         self.pages.addWidget(self.glyphs_page)
         self.pages.addWidget(self.keyboard_page)
         self.pages.addWidget(self.lexicon_page)
         self.pages.addWidget(self.grammar_page)
-        self.pages.addWidget(QLabel("Settings Page", alignment=Qt.AlignmentFlag.AlignCenter))
         self.statusBar().showMessage(f"Loaded: {self.project_name}", 4000)
 
     def closeEvent(self, event):
