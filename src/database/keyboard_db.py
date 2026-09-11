@@ -200,6 +200,25 @@ class KeyboardRepository:
             )
             return [dict(row) for row in cursor.fetchall()]
 
+    def all_mappings_for_language(self, language_id: str) -> List[Dict[str, Any]]:
+        """All mappings across every preset for a language.
+
+        Used by the on-screen keyboard: any key assigned in ANY preset
+        types its character (first mapping wins, ordered by created_at).
+        """
+        with self.db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT km.* FROM keyboard_mappings km
+                JOIN keyboard_presets kp ON kp.id = km.preset_id
+                WHERE km.language_id = ?
+                ORDER BY kp.created_at ASC, km.key_code ASC;
+                """,
+                (language_id,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
     def clear_mapping(self, preset_id: str, key_code: str):
         with self.db_manager.get_connection() as conn:
             conn.cursor().execute(

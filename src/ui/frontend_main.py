@@ -7,6 +7,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtCore import Qt
 from .components.coll_sidebar import Sidebar
+from .components.floating_keyboard import FloatingKeyboardButton
+from .components.on_screen_keyboard import OnScreenKeyboard
 from .pages.overview import Overview_Page
 from .pages.glyphs_page import Glyphs_Page
 from .pages.lexicon_page import LexiconPage
@@ -99,6 +101,7 @@ class MainWindow(QMainWindow):
             keyboard_repo=self.keyboard_repo,
             glyph_repo=self.glyph_repo,
             language_id=self.language_id,
+            data_dir=self.session_dir or "",
         )
         self.grammar_page = GrammarPage(
             grammar_repo=self.grammar_repo,
@@ -121,10 +124,83 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(central_widget)
 
+        # Floating digital-keyboard launcher (bottom-right) + popup panel
+        self.osk = None
+        self.kbd_button = FloatingKeyboardButton()
+        self.kbd_button.toggled_on.connect(self._toggle_osk)
+        self._install_floating_kbd()
+
     def _update_window_title(self):
         title_suffix = f" - {self.project_name}" if self.project_name else ""
         arc_suffix = f" [{os.path.basename(self.archive_path)}]" if self.archive_path else ""
         self.setWindowTitle(f"Lexicography & Language Software{title_suffix}{arc_suffix}")
+
+    # ---- Digital keyboard (floating launcher + popup) ----
+
+    def _install_floating_kbd(self):
+        """Pin the round keyboard button to the bottom-right corner."""
+        try:
+            self.kbd_button.setParent(self)
+            self.kbd_button.show()
+            self._pin_kbd_button()
+        except Exception:
+            pass
+
+    def _pin_kbd_button(self):
+        try:
+            status_h = self.statusBar().height() if self.statusBar() else 0
+            margin = 16
+            self.kbd_button.move(
+                self.width() - self.kbd_button.width() - margin,
+                self.height() - self.kbd_button.height() - margin - (status_h if status_h else 0),
+            )
+            self.kbd_button.raise_()
+        except Exception:
+            pass
+
+    def _toggle_osk(self):
+        if self.osk is not None:
+            self._close_osk()
+            return
+        if not self.keyboard_repo or not self.language_id:
+            self.kbd_button.setChecked(False)
+            return
+        self.osk = OnScreenKeyboard(
+            keyboard_repo=self.keyboard_repo,
+            language_id=self.language_id,
+            session_dir=self.session_dir or "",
+            parent=self,
+        )
+        self.osk.closed.connect(self._on_osk_closed)
+        self.osk.show()
+        self._position_osk()
+
+    def _position_osk(self):
+        if self.osk is None:
+            return
+        parent_pos = self.mapToGlobal(self.rect().bottomRight())
+        x = parent_pos.x() - self.osk.width() - 24
+        y = parent_pos.y() - self.osk.height() - 76
+        self.osk.move(x, y)
+
+    def _close_osk(self):
+        if self.osk is not None:
+            try:
+                self.osk.close()
+            except Exception:
+                pass
+            self.osk = None
+        if self.kbd_button:
+            self.kbd_button.setChecked(False)
+
+    def _on_osk_closed(self):
+        self.osk = None
+        if self.kbd_button:
+            self.kbd_button.setChecked(False)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._pin_kbd_button()
 
     def _setup_menu_bar(self):
         self.menu_bar = self.menuBar()
@@ -339,6 +415,7 @@ class MainWindow(QMainWindow):
             keyboard_repo=self.keyboard_repo,
             glyph_repo=self.glyph_repo,
             language_id=self.language_id,
+            data_dir=self.session_dir or "",
         )
         self.grammar_page = GrammarPage(
             grammar_repo=self.grammar_repo,

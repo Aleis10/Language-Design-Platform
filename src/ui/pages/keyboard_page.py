@@ -13,9 +13,11 @@ from PySide6.QtSvg import QSvgRenderer
 try:
     from database.keyboard_db import KeyboardRepository
     from database.glyph_db import GlyphRepository
-except ImportError:
+    from font_tools.font_registry import load_font_mapping
+except (ImportError, ValueError):
     from ..database.keyboard_db import KeyboardRepository
     from ..database.glyph_db import GlyphRepository
+    from ...font_tools.font_registry import load_font_mapping
 
 
 # Standard QWERTY layout (physical -> single-row)
@@ -48,12 +50,14 @@ def _render_glyph_icon(svg_data: str, size: int = 40) -> Optional[QIcon]:
 
 
 class _AssignDialog(QDialog):
-    def __init__(self, parent=None, key_code: str = "", available_glyphs=None, current: Optional[dict] = None):
+    def __init__(self, parent=None, key_code: str = "", available_glyphs=None, current: Optional[dict] = None, font_mapping: Optional[Dict[str, int]] = None):
         super().__init__(parent)
         self.key_code = key_code
         self.setWindowTitle(f"Assign key: '{key_code}'")
         self.setMinimumWidth(380)
         available_glyphs = available_glyphs or []
+        # glyph_id -> PPUA codepoint (from the exported font's .mapping.json)
+        self.font_mapping = font_mapping or {}
 
         form = QFormLayout(self)
 
@@ -84,16 +88,36 @@ class _AssignDialog(QDialog):
                 if idx >= 0:
                     self.combo_glyph.setCurrentIndex(idx)
 
+        # Automate PPUA: picking a glyph fills the PPUA box with its codepoint
+        self.combo_glyph.currentIndexChanged.connect(self._on_glyph_changed)
+        self._sync_ppua_from_glyph()
+
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         form.addRow(btns)
 
+    def _on_glyph_changed(self):
+        self._sync_ppua_from_glyph()
+
+    def _sync_ppua_from_glyph(self):
+        gid = self.combo_glyph.currentData()
+        if gid and gid in self.font_mapping:
+            cp = self.font_mapping[gid]
+            # U+E000 style label; also store raw int for get_data()
+            self.input_ppua.setText(f"U+{cp:04X}")
+
     def get_data(self):
+        # Resolve raw codepoint from the PPUA label we auto-filled
+        ppua_raw = self.input_ppua.text().strip()
+        # Accept either a hex codepoint label or an integer (text like U+E000)
+        gid = self.combo_glyph.currentData()
+        if gid and gid in self.font_mapping:
+            ppua_raw = f"U+{self.font_mapping[gid]:04X}"
         return {
             "assignment": self.input_text.text().strip(),
-            "ppua": self.input_ppua.text().strip(),
-            "glyph_id": self.combo_glyph.currentData(),
+            "ppua": ppua_raw,
+            "glyph_id": gid,
         }
 
 
@@ -117,15 +141,29 @@ class _PresetDialog(QDialog):
 
 
 class KeyboardPage(QWidget):
-    def __init__(self, keyboard_repo: KeyboardRepository, glyph_repo: GlyphRepository, language_id: str, parent=None):
+    def __init__(self, keyboard_repo: KeyboardRepository, glyph_repo: GlyphRepository, language_id: str, parent=None,
+                 data_dir: str = ""):
         super().__init__(parent)
         self.keyboard_repo = keyboard_repo
         self.glyph_repo = glyph_repo
         self.language_id = language_id
+        self.data_dir = data_dir
+        self._font_mapping = {}
         self._key_buttons = {}  # key_code -> QPushButton
         self._current_preset_id: Optional[str] = None
         self._build_ui()
         self.load_presets()
+        self._load_font_mapping()
+
+    def _load_font_mapping(self):
+        """glyph_id -> PPUA codepoint from the exported font's .mapping.json."""
+        self._font_mapping = {}
+        if not self.data_dir:
+            return
+        try:
+            self._font_mapping = load_font_mapping(self.data_dir)
+        except Exception:
+            self._font_mapping = {}
 
     def _load_stylesheet(self):
         style_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "keyboard_page.qss")
@@ -135,11 +173,16 @@ class KeyboardPage(QWidget):
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
-        root.setSpacing(12)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        # Header: title + preset controls
-        header = QHBoxLayout()
+        # Header bar (white, full width): title + preset controls
+        header_bar = QWidget()
+        header_bar.setObjectName("KbdTopBar")
+        header = QHBoxLayout(header_bar)
+        header.setContentsMargins(20, 12, 20, 12)
+        header.setSpacing(10)
+
         lbl = QLabel("Keyboard Layout Mapper")
         lbl.setObjectName("KbdTitle")
         header.addWidget(lbl)
@@ -166,10 +209,17 @@ class KeyboardPage(QWidget):
         header.addWidget(btn_delete_preset)
 
         header.addStretch()
-        root.addLayout(header)
+        root.addWidget(header_bar)
+
+        # Body container (padding under the bar)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(20, 16, 20, 16)
+        body_layout.setSpacing(10)
 
         # Second tool row: mapped count + clear all
         toolbar = QHBoxLayout()
+        toolbar.setSpacing(10)
         self.lbl_count = QLabel("0 keys mapped")
         self.lbl_count.setObjectName("KbdCount")
         toolbar.addWidget(self.lbl_count)
@@ -177,11 +227,11 @@ class KeyboardPage(QWidget):
         btn_clear = QPushButton("Clear All")
         btn_clear.clicked.connect(self._confirm_clear_all)
         toolbar.addWidget(btn_clear)
-        root.addLayout(toolbar)
+        body_layout.addLayout(toolbar)
 
         hint = QLabel("Click a key to assign a character, Unicode PPUA code, or glyph. Create presets for alternate layouts.")
         hint.setObjectName("KbdHint")
-        root.addWidget(hint)
+        body_layout.addWidget(hint)
 
         # Keyboard board
         self.board_container = QWidget()
@@ -212,7 +262,8 @@ class KeyboardPage(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.board_container)
         scroll.setObjectName("KbdScroll")
-        root.addWidget(scroll, stretch=1)
+        body_layout.addWidget(scroll, stretch=1)
+        root.addWidget(body, stretch=1)
 
         self._load_stylesheet()
 
@@ -298,7 +349,8 @@ class KeyboardPage(QWidget):
             return
         current = self.keyboard_repo.get_mapping(self._current_preset_id, key_code)
         glyphs = self.keyboard_repo.unassigned_glyphs(self.language_id)
-        dlg = _AssignDialog(self, key_code=key_code, current=current, available_glyphs=glyphs)
+        dlg = _AssignDialog(self, key_code=key_code, current=current, available_glyphs=glyphs,
+                            font_mapping=self._font_mapping)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             data = dlg.get_data()
             if data["assignment"] or data["glyph_id"]:
