@@ -63,6 +63,7 @@ class OnScreenKeyboard(QWidget):
     """Compact floating keyboard; types into QApplication.focusWidget()."""
 
     closed = Signal()
+    conlang_toggle_requested = Signal()
 
     def __init__(self, keyboard_repo, language_id: str, session_dir: str = "", parent=None):
         super().__init__(parent)
@@ -72,6 +73,7 @@ class OnScreenKeyboard(QWidget):
         self._key_buttons = {}
         self._mappings = {}
         self._conlang_family = None
+        self._conlang_mode = False
 
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
         self.setWindowTitle("Digital Keyboard")
@@ -102,6 +104,12 @@ class OnScreenKeyboard(QWidget):
         lbl.setObjectName("OSKTitle")
         header.addWidget(lbl)
         header.addStretch()
+        self.btn_conlang = QPushButton("CONLANG: OFF")
+        self.btn_conlang.setObjectName("OSKConlangToggle")
+        self.btn_conlang.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_conlang.setCheckable(True)
+        self.btn_conlang.clicked.connect(self._on_conlang_clicked)
+        header.addWidget(self.btn_conlang)
         btn_close = QToolButton()
         btn_close.setText("✕")
         btn_close.setObjectName("OSKClose")
@@ -354,3 +362,96 @@ class OnScreenKeyboard(QWidget):
             QApplication.sendEvent(w, release)
         except Exception:
             pass
+
+    # ---- Conlang mode mirroring ----
+
+    def set_conlang_mode(self, on: bool):
+        """Called when Conlang mode toggles. Keeps an indicator state so pressed
+        physical keys highlight the corresponding key."""
+        self._conlang_mode = on
+        if hasattr(self, "btn_conlang"):
+            self.btn_conlang.setChecked(on)
+            self.btn_conlang.setText("CONLANG: ON" if on else "CONLANG: OFF")
+            self.btn_conlang.setStyleSheet(
+                "QPushButton { background:#007acc; color:white; font-weight:bold; border:none; border-radius:4px; padding:2px 8px; }"
+                if on else ""
+            )
+        if not on:
+            self.clear_highlight()
+        # a subtle border change so the user knows mode is on
+        for btn in self._key_buttons.values():
+            self._repaint_key(btn)
+
+    def _on_conlang_clicked(self):
+        """User clicked the toggle inside the OSK — ask MainWindow to flip mode."""
+        self.conlang_toggle_requested.emit()
+
+    def highlight_key(self, key_code: str):
+        """Highlight the key that was physically pressed (mirror)."""
+        btn = self._key_buttons.get(key_code)
+        if btn is not None:
+            self._highlight_btn(btn)
+
+    def clear_highlight(self):
+        for btn in self._key_buttons.values():
+            self._unhighlight_btn(btn)
+
+    def _highlight_btn(self, btn):
+        try:
+            btn.setProperty("pressedX", True)
+            btn.setStyleSheet(
+                "QPushButton { background:#cfe8ff; border:2px solid #007acc; border-radius:5px; }"
+            )
+        except Exception:
+            pass
+
+    def _unhighlight_btn(self, btn):
+        try:
+            btn.setProperty("pressedX", False)
+        except Exception:
+            pass
+        self._repaint_key(btn)
+
+    def _repaint_key(self, btn):
+        """Repaint a key to its normal (mapped/unmapped) style."""
+        try:
+            key = next((k for k, b in self._key_buttons.items() if b is btn), None)
+            if key is None:
+                return
+            # simulate what _paint_keys does for this key
+            m = self._mappings.get(key)
+            if m and (m.get("char") or m.get("glyph_id")):
+                self._paint_key_btn(btn, key, m)
+            else:
+                btn.setStyleSheet("")
+                btn.setFont(QFont())
+        except Exception:
+            pass
+
+    def _paint_key_btn(self, btn, key, m):
+        """Reconstruct a single keycap appearance from its mapping."""
+        if m.get("glyph_id") and self.session_dir:
+            svg = ""
+            try:
+                g = self.keyboard_repo.get_glyph(m["glyph_id"])
+                svg = g.get("svg_data", "") if g else ""
+            except Exception:
+                svg = ""
+            icon = _render_glyph_icon(svg, 22) if svg else None
+            if icon:
+                btn.setText("")
+                btn.setIcon(icon)
+                btn.setIconSize(QSize(22, 22))
+                btn.setStyleSheet("QPushButton { background:#e3f0ff; border:1px solid #4a90d9; border-radius:5px; }")
+                return
+        btn.setIcon(QIcon())
+        btn.setText(m["char"] if m["char"] else key)
+        if m["char"] and any(ord(c) >= 0xE000 for c in m["char"]):
+            btn.setStyleSheet("QPushButton { background:#e3f0ff; border:1px solid #4a90d9; border-radius:5px; font-size:18px; }")
+            try:
+                btn.setFont(conlang_font(point_size=18))
+            except Exception:
+                pass
+        else:
+            btn.setStyleSheet("")
+            btn.setFont(QFont())

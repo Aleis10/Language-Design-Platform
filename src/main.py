@@ -39,8 +39,8 @@ def main():
     if not project_name:
         project_name = os.path.splitext(os.path.basename(archive_or_db_path))[0].replace("_", " ").title() or "Untitled Language"
 
-    # Route between .langarc/.zip archive packages and legacy .db files
-    if archive_or_db_path.endswith(".langarc") or archive_or_db_path.endswith(".zip"):
+    # Route between .langarc/.zip archive packages
+    if archive_or_db_path.endswith(".langarc"):
         archive_path = archive_or_db_path
         if is_new_project:
             session_dir, db_path = ProjectArchiveManager.create_new_archive(archive_path, project_name)

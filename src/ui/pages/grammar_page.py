@@ -422,11 +422,16 @@ class GrammarPage(QWidget):
     def _build_rules_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Top bar
-        top = QHBoxLayout()
+        # Top bar (white, full width)
+        top_bar = QWidget()
+        top_bar.setObjectName("GrammarTopBar")
+        top = QHBoxLayout(top_bar)
+        top.setContentsMargins(20, 12, 20, 12)
+        top.setSpacing(12)
+
         lbl = QLabel("Affix & Grammar Rules")
         lbl.setObjectName("GrammarTitle")
         top.addWidget(lbl)
@@ -463,12 +468,18 @@ class GrammarPage(QWidget):
         self.combo_category_filter.currentIndexChanged.connect(self._on_category_filter_changed)
         top.addWidget(self.combo_category_filter)
 
-        layout.addLayout(top)
+        layout.addWidget(top_bar)
+
+        # Body (padding under bar)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(20, 16, 20, 16)
+        body_layout.setSpacing(12)
 
         # Info hint
         hint = QLabel("Organize grammar rules by category. Used by the interlinear parser for morphological stripping.")
         hint.setObjectName("GrammarHint")
-        layout.addWidget(hint)
+        body_layout.addWidget(hint)
 
         # Category cards area
         self.categories_scroll = QScrollArea()
@@ -480,7 +491,7 @@ class GrammarPage(QWidget):
         self.categories_layout.setSpacing(10)
         self.categories_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.categories_scroll.setWidget(self.categories_container)
-        layout.addWidget(self.categories_scroll, stretch=1)
+        body_layout.addWidget(self.categories_scroll, stretch=1)
 
         # Rules table
         self.rules_table = QTableWidget()
@@ -496,13 +507,14 @@ class GrammarPage(QWidget):
         self.rules_table.setAlternatingRowColors(True)
         self.rules_table.verticalHeader().setVisible(False)
         self.rules_table.setColumnHidden(6, True)
-        layout.addWidget(self.rules_table, stretch=2)
+        body_layout.addWidget(self.rules_table, stretch=2)
 
         # Count footer
         self.lbl_rules_count = QLabel("0 rules")
         self.lbl_rules_count.setObjectName("GrammarCount")
-        layout.addWidget(self.lbl_rules_count)
+        body_layout.addWidget(self.lbl_rules_count)
 
+        layout.addWidget(body, stretch=1)
         self.stack.addWidget(page)
 
     # ── TAB 1: PARADIGM GRIDS ──────────────────────────────────
@@ -510,11 +522,16 @@ class GrammarPage(QWidget):
     def _build_paradigms_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Top bar
-        top = QHBoxLayout()
+        # Top bar (white, full width)
+        top_bar = QWidget()
+        top_bar.setObjectName("GrammarTopBar")
+        top = QHBoxLayout(top_bar)
+        top.setContentsMargins(20, 12, 20, 12)
+        top.setSpacing(12)
+
         lbl = QLabel("Paradigm Grids")
         lbl.setObjectName("GrammarTitle")
         top.addWidget(lbl)
@@ -535,11 +552,17 @@ class GrammarPage(QWidget):
         top.addWidget(btn_delete)
 
         top.addStretch()
-        layout.addLayout(top)
+        layout.addWidget(top_bar)
+
+        # Body (padding under bar)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(20, 16, 20, 16)
+        body_layout.setSpacing(12)
 
         hint = QLabel("Build morphological paradigm tables (verb conjugations, noun declensions, etc.)")
         hint.setObjectName("GrammarHint")
-        layout.addWidget(hint)
+        body_layout.addWidget(hint)
 
         self.paradigms_scroll = QScrollArea()
         self.paradigms_scroll.setObjectName("GrammarScroll")
@@ -550,8 +573,9 @@ class GrammarPage(QWidget):
         self.paradigms_layout.setSpacing(16)
         self.paradigms_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.paradigms_scroll.setWidget(self.paradigms_container)
-        layout.addWidget(self.paradigms_scroll, stretch=1)
+        body_layout.addWidget(self.paradigms_scroll, stretch=1)
 
+        layout.addWidget(body, stretch=1)
         self.stack.addWidget(page)
 
     # ── TAB 2: PHRASE TEMPLATES ────────────────────────────────
@@ -559,11 +583,16 @@ class GrammarPage(QWidget):
     def _build_templates_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Top bar
-        top = QHBoxLayout()
+        # Top bar (white, full width)
+        top_bar = QWidget()
+        top_bar.setObjectName("GrammarTopBar")
+        top = QHBoxLayout(top_bar)
+        top.setContentsMargins(20, 12, 20, 12)
+        top.setSpacing(12)
+
         lbl = QLabel("Phrase Templates")
         lbl.setObjectName("GrammarTitle")
         top.addWidget(lbl)
@@ -584,11 +613,17 @@ class GrammarPage(QWidget):
         top.addWidget(btn_delete)
 
         top.addStretch()
-        layout.addLayout(top)
+        layout.addWidget(top_bar)
+
+        # Body (padding under bar)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(20, 16, 20, 16)
+        body_layout.setSpacing(12)
 
         hint = QLabel("Document sentence patterns, word order templates, and interlinear gloss structures.")
         hint.setObjectName("GrammarHint")
-        layout.addWidget(hint)
+        body_layout.addWidget(hint)
 
         self.templates_table = QTableWidget()
         self.templates_table.setObjectName("GrammarTemplatesTable")
@@ -604,12 +639,13 @@ class GrammarPage(QWidget):
         self.templates_table.setAlternatingRowColors(True)
         self.templates_table.verticalHeader().setVisible(False)
         self.templates_table.setColumnHidden(5, True)
-        layout.addWidget(self.templates_table, stretch=1)
+        body_layout.addWidget(self.templates_table, stretch=1)
 
         self.lbl_templates_count = QLabel("0 templates")
         self.lbl_templates_count.setObjectName("GrammarCount")
-        layout.addWidget(self.lbl_templates_count)
+        body_layout.addWidget(self.lbl_templates_count)
 
+        layout.addWidget(body, stretch=1)
         self.stack.addWidget(page)
 
     # ── REFRESH ─────────────────────────────────────────────────

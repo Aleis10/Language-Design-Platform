@@ -1,11 +1,13 @@
 import os
 import sys
+from typing import Dict, Optional
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QLabel,
-    QMessageBox, QFileDialog
+    QMessageBox, QFileDialog, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox,
+    QApplication,
 )
-from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QKeySequence, QFont, QShortcut, QKeyEvent
+from PySide6.QtCore import Qt, QEvent, QObject, Signal, QTimer
 from .components.coll_sidebar import Sidebar
 from .components.floating_keyboard import FloatingKeyboardButton
 from .components.on_screen_keyboard import OnScreenKeyboard
@@ -27,6 +29,112 @@ except (ImportError, ValueError):
     from ..database.keyboard_db import KeyboardRepository
     from ..database.grammar_db import GrammarRepository
     from ..database.archive_manager import ProjectArchiveManager
+
+
+class _ConlangFontFilter(QObject):
+    """Installs the conlang font on every editable text widget automatically.
+
+    Once a language font is registered (session_dir), any QLineEdit / QTextEdit /
+    QPlainTextEdit / QComboBox that appears gets the conlang font so PPUA glyph
+    characters render as logograms everywhere (Latin still falls back).
+
+    The font is registered AT MOST ONCE (cached family); we never re-add the font
+    file to QFontDatabase per event, which is crash-prone with QtMultimedia."""
+
+    def __init__(self, data_dir: str = "", parent=None):
+        super().__init__(parent)
+        self.data_dir = data_dir
+        self._family = None
+        self._registered = False
+        self._queued = set()  # ids of widgets already scheduled for font apply
+
+    def refresh_family(self):
+        """Register the font once and cache the family name."""
+        if self._registered:
+            return self._family
+        self._registered = True
+        self._family = None
+        if not self.data_dir:
+            return None
+        try:
+            from font_tools.font_registry import register_language_font
+            self._family = register_language_font(self.data_dir)
+        except Exception:
+            self._family = None
+        return self._family
+
+    def eventFilter(self, obj, event):
+        # Catch both polish and child-added, but DEFER font application to the
+        # next event-loop iteration via a zero-timer — never set fonts during
+        # widget construction (crash risk with QtMultimedia).
+        if event.type() in (QEvent.Type.Polish, QEvent.Type.ChildAdded):
+            self._defer_apply(obj)
+        return super().eventFilter(obj, event)
+
+    def _defer_apply(self, w):
+        if not isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox)):
+            return
+        if id(w) in self._queued:
+            return
+        self._queued.add(id(w))
+        QTimer.singleShot(0, lambda: self._apply_to(w))
+
+    def _apply_to(self, w):
+        if not isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox)):
+            return
+        family = self.refresh_family()
+        if not family:
+            return
+        try:
+            cur = w.font().family()
+            if cur == family:
+                return  # already applied; avoid churn
+            w.setFont(QFont(family, w.font().pointSize() or 12))
+        except Exception:
+            pass
+
+
+class _ConlangModeController(QObject):
+    """Tracks Conlang mode (physical keys → glyphs) and notifies listeners.
+
+    When active, physical keypresses on mapped keys insert the glyph into the
+    focused field (handled in MainWindow's event filter); the OSK mirrors by
+    highlighting the pressed key."""
+
+    mode_changed = Signal(bool)
+    key_pressed = Signal(str)   # key_code (e.g. "a", "k") for OSK highlight
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._active = False
+        self.key_to_glyph: Dict[str, Dict] = {}  # key_code -> mapping
+
+    @property
+    def active(self) -> bool:
+        return self._active
+
+    def set_active(self, on: bool):
+        if on != self._active:
+            self._active = on
+            self.mode_changed.emit(on)
+
+    def set_mappings(self, mappings: Dict[str, Dict]):
+        self.key_to_glyph = mappings
+
+    def glyph_for_key(self, key_code: str) -> Optional[str]:
+        """Return the character this physical key should type in Conlang mode,
+        or None if the key isn't mapped."""
+        m = self.key_to_glyph.get(key_code)
+        if not m:
+            return None
+        char = m.get("char")
+        if char:
+            return char
+        ppua = m.get("ppua") or ""
+        # Only use ppua if it's a real character, not a "U+XXXX" label
+        if ppua and not ppua.startswith("U+"):
+            return ppua
+        return None
 
 
 class MainWindow(QMainWindow):
@@ -103,6 +211,7 @@ class MainWindow(QMainWindow):
             language_id=self.language_id,
             data_dir=self.session_dir or "",
         )
+        self.keyboard_page.on_saved = self._reload_conlang_mappings
         self.grammar_page = GrammarPage(
             grammar_repo=self.grammar_repo,
             language_id=self.language_id,
@@ -129,6 +238,24 @@ class MainWindow(QMainWindow):
         self.kbd_button = FloatingKeyboardButton()
         self.kbd_button.toggled_on.connect(self._toggle_osk)
         self._install_floating_kbd()
+
+        # App-wide conlang font: apply to every editable text widget so glyphs
+        # render anywhere in the app (per language), not just lexicon.
+        self.conlang_font_filter = _ConlangFontFilter(data_dir=self.session_dir or "", parent=self)
+        app_instance = QApplication.instance()
+        if app_instance is not None:
+            app_instance.installEventFilter(self.conlang_font_filter)
+        self.conlang_font_filter.refresh_family()
+
+        # Conlang mode: physical keys → glyphs (toggle via Ctrl+Shift+Space)
+        self.conlang_mode = _ConlangModeController(parent=self)
+        self.conlang_mode.mode_changed.connect(self._on_conlang_mode_changed)
+        app_instance = QApplication.instance()
+        if app_instance is not None:
+            app_instance.installEventFilter(self)
+        self._reload_conlang_mappings()
+        self._setup_conlang_hotkey()
+        self._setup_conlang_indicator()
 
     def _update_window_title(self):
         title_suffix = f" - {self.project_name}" if self.project_name else ""
@@ -172,6 +299,10 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self.osk.closed.connect(self._on_osk_closed)
+        # Mirror physical keypresses onto the OSK
+        self.conlang_mode.key_pressed.connect(self.osk.highlight_key)
+        self.osk.conlang_toggle_requested.connect(self.toggle_conlang_mode)
+        self.osk.set_conlang_mode(self.conlang_mode.active)
         self.osk.show()
         self._position_osk()
 
@@ -197,6 +328,128 @@ class MainWindow(QMainWindow):
         self.osk = None
         if self.kbd_button:
             self.kbd_button.setChecked(False)
+
+    # ---- Conlang mode (physical keys -> glyphs) ----
+
+    def _setup_conlang_hotkey(self):
+        """Ctrl+Shift+Space toggles Conlang mode (like an IME switch)."""
+        try:
+            self._conlang_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Space"), self)
+            self._conlang_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            self._conlang_shortcut.activated.connect(self.toggle_conlang_mode)
+        except Exception:
+            self._conlang_shortcut = None
+
+    def _setup_conlang_indicator(self):
+        """A small label on the status bar showing Conlang mode state."""
+        try:
+            self.conlang_indicator = QLabel("CONLANG: OFF")
+            self.conlang_indicator.setToolTip("Conlang mode — press Ctrl+Shift+Space to toggle")
+            self.statusBar().addPermanentWidget(self.conlang_indicator)
+            self._style_conlang_indicator(False)
+        except Exception:
+            self.conlang_indicator = None
+
+    def _style_conlang_indicator(self, on: bool):
+        if not getattr(self, "conlang_indicator", None):
+            return
+        if on:
+            self.conlang_indicator.setText("CONLANG: ON")
+            self.conlang_indicator.setStyleSheet(
+                "background:#007acc; color:white; padding:2px 10px; border-radius:9px; font-weight:bold;"
+            )
+        else:
+            self.conlang_indicator.setText("CONLANG: OFF")
+            self.conlang_indicator.setStyleSheet(
+                "background:#e0e0e0; color:#666; padding:2px 10px; border-radius:9px;"
+            )
+
+    def toggle_conlang_mode(self):
+        self.conlang_mode.set_active(not self.conlang_mode.active)
+
+    def _on_conlang_mode_changed(self, on: bool):
+        self._style_conlang_indicator(on)
+        # Mirror the mode on the OSK, if open
+        if self.osk is not None and hasattr(self.osk, "set_conlang_mode"):
+            self.osk.set_conlang_mode(on)
+        try:
+            self.statusBar().showMessage(
+                f"Conlang mode {'ON — physical keys type glyphs' if on else 'OFF — normal typing'}", 3000
+            )
+        except Exception:
+            pass
+
+    def _reload_conlang_mappings(self):
+        """Build key_code -> {char, glyph_id, ppua} from the current project."""
+        mappings: Dict[str, Dict] = {}
+        if self.keyboard_repo and self.language_id:
+            try:
+                from font_tools.font_registry import glyph_character
+                for m in self.keyboard_repo.all_mappings_for_language(self.language_id):
+                    key_code = m.get("key_code")
+                    if not key_code:
+                        continue
+                    char = m.get("assignment") or ""
+                    if m.get("glyph_id") and self.session_dir:
+                        gchar = glyph_character(self.session_dir, m["glyph_id"])
+                        if gchar:
+                            char = gchar
+                    mappings[key_code] = {"char": char, "glyph_id": m.get("glyph_id"), "ppua": m.get("ppua") or ""}
+            except Exception:
+                mappings = {}
+        self.conlang_mode.set_mappings(mappings)
+
+    def eventFilter(self, obj, event):
+        """When Conlang mode is ON, translate a mapped physical keypress into its
+        glyph and swallow the original Latin character."""
+        if event.type() == QEvent.Type.KeyPress and self.conlang_mode.active \
+                and not event.isAutoRepeat():
+            key_code = self._qkey_to_key_code(event)
+            if key_code:
+                glyph = self.conlang_mode.glyph_for_key(key_code)
+                if glyph:
+                    # Mirror on the OSK
+                    self.conlang_mode.key_pressed.emit(key_code)
+                    self._insert_into_focus(glyph)
+                    return True  # swallow the original key
+        return super().eventFilter(obj, event)
+
+    @staticmethod
+    def _qkey_to_key_code(event) -> Optional[str]:
+        """Map a Qt key event to the OSK/QWERTY key_code (letter or symbol)."""
+        key = event.key()
+        text = event.text()
+        if text and len(text) == 1 and text.isprintable() and text in "`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./":
+            return text
+        # fallback: letters/digits from the key enum
+        if Qt.Key.Key_A <= key <= Qt.Key.Key_Z:
+            return chr(ord('a') + (key - Qt.Key.Key_A))
+        if Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
+            return chr(ord('0') + (key - Qt.Key.Key_0))
+        return None
+
+    def _insert_into_focus(self, text: str):
+        """Insert text into the currently focused editable widget."""
+        w = QApplication.focusWidget()
+        if w is None:
+            return
+        for meth in ("insert", "insertPlainText"):
+            fn = getattr(w, meth, None)
+            if callable(fn):
+                try:
+                    fn(text)
+                    return
+                except Exception:
+                    pass
+        setter = getattr(w, "setText", None)
+        getter = getattr(w, "text", None)
+        if callable(setter) and callable(getter):
+            try:
+                setter(str(getter()) + text)
+            except Exception:
+                pass
+
+    # ---- Menu bar ----
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -417,6 +670,7 @@ class MainWindow(QMainWindow):
             language_id=self.language_id,
             data_dir=self.session_dir or "",
         )
+        self.keyboard_page.on_saved = self._reload_conlang_mappings
         self.grammar_page = GrammarPage(
             grammar_repo=self.grammar_repo,
             language_id=self.language_id,

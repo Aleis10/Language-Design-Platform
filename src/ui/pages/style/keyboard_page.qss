@@ -7,6 +7,12 @@ QLabel#KbdTitle {
     color: #111111;
 }
 
+QWidget#KbdTopBar {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    min-height: 40px;
+}
+
 QLabel#KbdCount {
     color: #666666;
     font-size: 12px;

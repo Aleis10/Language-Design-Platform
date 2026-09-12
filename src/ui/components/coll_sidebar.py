@@ -18,7 +18,7 @@ class Sidebar(QFrame):
         self.on_page_changed = on_page_changed_callback
         self.buttons = []
 
-        self.setFixedWidth(200)
+        self.setFixedWidth(230)
         self.setStyleSheet("background-color: #f8f9fa; border-right: 1px solid #e0e0e0;")
 
         self.layout = QVBoxLayout(self)
@@ -34,7 +34,7 @@ class Sidebar(QFrame):
                 font-weight: bold;
                 border: none;
                 border-radius: 6px;
-                color:black;
+                color: black;
             }
             QPushButton:hover { background-color: #e5e5e5; }
         """)
@@ -42,13 +42,11 @@ class Sidebar(QFrame):
         self.layout.addWidget(self.btn_toggle)
 
         nav_items = [
-            (get_icon("overview.svg"), "Dashboard"),
             (get_icon("language_overview.svg"), "Language Overview"),
             (get_icon("logogram.svg"), "Logograms"),
             (get_icon("Keyboard.svg"), "Keyboard"),
             (get_icon("edit.svg"), "Lexicon"),
-            (get_icon("grammer.svg"), "Grammar"),
-            (get_icon("Trash.svg"), "Settings")
+            (get_icon("grammer.svg"), "Grammar")
         ]
 
         for index, (icon_path, label) in enumerate(nav_items):
@@ -70,6 +68,6 @@ class Sidebar(QFrame):
 
     def toggle_sidebar(self):
         self.is_collapsed = not self.is_collapsed
-        self.setFixedWidth(60 if self.is_collapsed else 200)
+        self.setFixedWidth(60 if self.is_collapsed else 230)
         for btn in self.buttons:
             btn.set_collapsed(self.is_collapsed)

@@ -38,6 +38,12 @@ QLabel#GrammarTitle {
     color: #111111;
 }
 
+QWidget#GrammarTopBar {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    min-height: 40px;
+}
+
 QLabel#GrammarHint {
     color: #777777;
     font-size: 11px;

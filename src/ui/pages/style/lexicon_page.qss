@@ -7,6 +7,12 @@ QLabel#LexTitle {
     color: #111111;
 }
 
+QWidget#LexTopBar {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    min-height: 40px;
+}
+
 QPushButton#LexDelete {
     color: #c0392b;
 }

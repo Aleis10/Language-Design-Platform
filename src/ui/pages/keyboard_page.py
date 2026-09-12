@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QComboBox, QFrame,
-    QMessageBox, QScrollArea, QToolButton, QInputDialog,
+    QMessageBox, QScrollArea, QToolButton, QInputDialog, QApplication,
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QPainter
@@ -50,6 +50,9 @@ def _render_glyph_icon(svg_data: str, size: int = 40) -> Optional[QIcon]:
 
 
 class _AssignDialog(QDialog):
+    """Assign a key to a glyph only. The font rebuild (on Save) turns the glyph
+    into a typeable character, so no manual character / PPUA is needed."""
+
     def __init__(self, parent=None, key_code: str = "", available_glyphs=None, current: Optional[dict] = None, font_mapping: Optional[Dict[str, int]] = None):
         super().__init__(parent)
         self.key_code = key_code
@@ -61,15 +64,7 @@ class _AssignDialog(QDialog):
 
         form = QFormLayout(self)
 
-        self.input_text = QLineEdit()
-        self.input_text.setPlaceholderText("Character / text this key outputs")
-        form.addRow("Assigned Character:", self.input_text)
-
-        self.input_ppua = QLineEdit()
-        self.input_ppua.setPlaceholderText("e.g. U+E000 - U+F8FF (Private Use Area)")
-        form.addRow("Unicode PPUA:", self.input_ppua)
-
-        # Glyph picker with previews
+        # Glyph picker with previews — the ONLY thing the user sets
         self.combo_glyph = QComboBox()
         self.combo_glyph.addItem("(none)", None)
         for g in available_glyphs:
@@ -78,46 +73,31 @@ class _AssignDialog(QDialog):
             label = f"{name} — {meaning}" if meaning else name
             icon = _render_glyph_icon(g.get("svg_data", ""), 24)
             self.combo_glyph.addItem(icon if icon else QIcon(), label, g.get("id"))
-        form.addRow("Link Glyph:", self.combo_glyph)
+        form.addRow("Glyph for this key:", self.combo_glyph)
 
-        if current:
-            self.input_text.setText(current.get("assignment", ""))
-            self.input_ppua.setText(current.get("ppua", ""))
-            if current.get("glyph_id"):
-                idx = self.combo_glyph.findData(current["glyph_id"])
-                if idx >= 0:
-                    self.combo_glyph.setCurrentIndex(idx)
+        hint = QLabel("Only pick a glyph. Clicking this key will type that glyph "
+                      "(after Save rebuilds the language font).")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #777; font-size: 11px;")
+        form.addRow(hint)
 
-        # Automate PPUA: picking a glyph fills the PPUA box with its codepoint
-        self.combo_glyph.currentIndexChanged.connect(self._on_glyph_changed)
-        self._sync_ppua_from_glyph()
+        if current and current.get("glyph_id"):
+            idx = self.combo_glyph.findData(current["glyph_id"])
+            if idx >= 0:
+                self.combo_glyph.setCurrentIndex(idx)
 
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         form.addRow(btns)
 
-    def _on_glyph_changed(self):
-        self._sync_ppua_from_glyph()
-
-    def _sync_ppua_from_glyph(self):
-        gid = self.combo_glyph.currentData()
-        if gid and gid in self.font_mapping:
-            cp = self.font_mapping[gid]
-            # U+E000 style label; also store raw int for get_data()
-            self.input_ppua.setText(f"U+{cp:04X}")
-
     def get_data(self):
-        # Resolve raw codepoint from the PPUA label we auto-filled
-        ppua_raw = self.input_ppua.text().strip()
-        # Accept either a hex codepoint label or an integer (text like U+E000)
-        gid = self.combo_glyph.currentData()
-        if gid and gid in self.font_mapping:
-            ppua_raw = f"U+{self.font_mapping[gid]:04X}"
+        """Return the mapping data. The font rebuild on Save assigns PPUA, so
+        we only persist the glyph_id here."""
         return {
-            "assignment": self.input_text.text().strip(),
-            "ppua": ppua_raw,
-            "glyph_id": gid,
+            "assignment": "",   # glyph-only; no manual character
+            "ppua": "",         # filled at font-rebuild time
+            "glyph_id": self.combo_glyph.currentData(),
         }
 
 
@@ -151,6 +131,7 @@ class KeyboardPage(QWidget):
         self._font_mapping = {}
         self._key_buttons = {}  # key_code -> QPushButton
         self._current_preset_id: Optional[str] = None
+        self.on_saved = None  # MainWindow sets this to refresh Conlang mappings
         self._build_ui()
         self.load_presets()
         self._load_font_mapping()
@@ -224,6 +205,12 @@ class KeyboardPage(QWidget):
         self.lbl_count.setObjectName("KbdCount")
         toolbar.addWidget(self.lbl_count)
         toolbar.addStretch()
+        btn_save = QPushButton("Save & Rebuild Font")
+        btn_save.setObjectName("KbdSave")
+        btn_save.setToolTip("Save this preset's mappings and rebuild the language font "
+                            "from ALL glyphs, so the assigned glyphs become typeable everywhere.")
+        btn_save.clicked.connect(self._save_and_rebuild)
+        toolbar.addWidget(btn_save)
         btn_clear = QPushButton("Clear All")
         btn_clear.clicked.connect(self._confirm_clear_all)
         toolbar.addWidget(btn_clear)
@@ -378,6 +365,61 @@ class KeyboardPage(QWidget):
         if res == QMessageBox.StandardButton.Yes:
             self.keyboard_repo.clear_all_mappings(self._current_preset_id)
             self.refresh()
+
+    def _save_and_rebuild(self):
+        """Save this preset's mappings and rebuild the language font from ALL
+        glyphs, so assigned glyphs become typeable characters everywhere in the app."""
+        if not self._current_preset_id:
+            QMessageBox.information(self, "No Preset", "Select or create a preset first.")
+            return
+
+        # Pint the current combo selection into the current preset (edits are per-key)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            # 1. Rebuild the font from ALL glyphs (export_service pipeline)
+            glyph_rows = self.glyph_repo.get_all_glyphs(self.language_id)
+            if not glyph_rows:
+                QMessageBox.warning(
+                    self, "No Glyphs",
+                    "No glyphs yet — draw some logograms first, then Save to build the font.",
+                )
+                return
+            from font_tools.export_service import export_language_font
+            from font_tools.font_registry import get_fonts_dir, register_language_font
+            fonts_dir = get_fonts_dir(self.data_dir) if self.data_dir else self.data_dir
+            result = export_language_font(glyph_rows, fonts_dir)
+            # 2. Register the new font with Qt so PPUA chars render immediately
+            register_language_font(self.data_dir)
+            self._load_font_mapping()
+
+            # 3. Sync PPUA into the current preset's glyph mappings
+            for m in self.keyboard_repo.get_all_mappings(self._current_preset_id):
+                gid = m.get("glyph_id")
+                if gid and gid in self._font_mapping:
+                    cp = self._font_mapping[gid]
+                    self.keyboard_repo.set_mapping(
+                        language_id=self.language_id,
+                        preset_id=self._current_preset_id,
+                        key_code=m["key_code"],
+                        assignment="",           # glyph-only model
+                        ppua=f"U+{cp:04X}",       # internal plumbing filled here
+                        glyph_id=gid,
+                        key_label=m["key_code"],
+                    )
+
+            QMessageBox.information(
+                self, "Layout Saved",
+                f"Layout saved and font rebuilt ({result.num_glyphs} glyphs).\n"
+                "Your glyphs are now typeable everywhere — click a key or press the "
+                "physical key (with Conlang mode ON).",
+            )
+            if callable(self.on_saved):
+                self.on_saved()
+        except Exception as exc:
+            QMessageBox.critical(self, "Rebuild Failed", f"Could not rebuild font:\n{exc}")
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.refresh()
 
     # ---- Refresh ----
 

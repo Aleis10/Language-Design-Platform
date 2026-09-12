@@ -1,6 +1,6 @@
 import os
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFileDialog, QMessageBox, QStackedWidget, QWidget
 )
 from PySide6.QtCore import Qt
@@ -122,11 +122,10 @@ class ProjectHub(QDialog):
             dialog = QFileDialog(self, "Select Project Archive Location", default_file,
                 "Language Archive (*.langarc);;Zip Archive (*.zip);;SQLite Database (*.db)")
             dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-            if dialog.exec() != QFileDialog.DialogCode.Accepted:
-                return
-            file_path = dialog.selectedFiles()[0]
-            if file_path:
-                self.input_path.setText(file_path)
+            if dialog.exec() == QFileDialog.DialogCode.Accepted:
+                file_path = dialog.selectedFiles()[0]
+                if file_path:
+                    self.input_path.setText(file_path)
 
     def _handle_create_project(self):
         name = self.input_name.text().strip()
