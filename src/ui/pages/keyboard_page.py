@@ -19,8 +19,6 @@ except (ImportError, ValueError):
     from ..database.glyph_db import GlyphRepository
     from ...font_tools.font_registry import load_font_mapping
 
-
-# Standard QWERTY layout (physical -> single-row)
 QWERTY_ROWS = [
     ["`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "Backspace"],
     ["Tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"],
@@ -31,9 +29,7 @@ QWERTY_ROWS = [
 
 NON_ASSIGNABLE = {"Tab", "Caps", "Shift", "Enter", "Backspace", " ", "      "}
 
-
 def _render_glyph_icon(svg_data: str, size: int = 40) -> Optional[QIcon]:
-    """Render an SVG glyph string into a QIcon for display on key buttons."""
     if not svg_data or not svg_data.strip():
         return None
     try:
@@ -48,10 +44,7 @@ def _render_glyph_icon(svg_data: str, size: int = 40) -> Optional[QIcon]:
     except Exception:
         return None
 
-
 class _AssignDialog(QDialog):
-    """Assign a key to a glyph only. The font rebuild (on Save) turns the glyph
-    into a typeable character, so no manual character / PPUA is needed."""
 
     def __init__(self, parent=None, key_code: str = "", available_glyphs=None, current: Optional[dict] = None, font_mapping: Optional[Dict[str, int]] = None):
         super().__init__(parent)
@@ -59,12 +52,10 @@ class _AssignDialog(QDialog):
         self.setWindowTitle(f"Assign key: '{key_code}'")
         self.setMinimumWidth(380)
         available_glyphs = available_glyphs or []
-        # glyph_id -> PPUA codepoint (from the exported font's .mapping.json)
         self.font_mapping = font_mapping or {}
 
         form = QFormLayout(self)
 
-        # Glyph picker with previews — the ONLY thing the user sets
         self.combo_glyph = QComboBox()
         self.combo_glyph.addItem("(none)", None)
         for g in available_glyphs:
@@ -92,14 +83,11 @@ class _AssignDialog(QDialog):
         form.addRow(btns)
 
     def get_data(self):
-        """Return the mapping data. The font rebuild on Save assigns PPUA, so
-        we only persist the glyph_id here."""
         return {
             "assignment": "",   # glyph-only; no manual character
             "ppua": "",         # filled at font-rebuild time
             "glyph_id": self.combo_glyph.currentData(),
         }
-
 
 class _PresetDialog(QDialog):
     def __init__(self, parent=None, name: str = ""):
@@ -119,7 +107,6 @@ class _PresetDialog(QDialog):
     def get_name(self):
         return self.input_name.text().strip()
 
-
 class KeyboardPage(QWidget):
     def __init__(self, keyboard_repo: KeyboardRepository, glyph_repo: GlyphRepository, language_id: str, parent=None,
                  data_dir: str = ""):
@@ -137,7 +124,6 @@ class KeyboardPage(QWidget):
         self._load_font_mapping()
 
     def _load_font_mapping(self):
-        """glyph_id -> PPUA codepoint from the exported font's .mapping.json."""
         self._font_mapping = {}
         if not self.data_dir:
             return
@@ -157,7 +143,6 @@ class KeyboardPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Header bar (white, full width): title + preset controls
         header_bar = QWidget()
         header_bar.setObjectName("KbdTopBar")
         header = QHBoxLayout(header_bar)
@@ -192,13 +177,11 @@ class KeyboardPage(QWidget):
         header.addStretch()
         root.addWidget(header_bar)
 
-        # Body container (padding under the bar)
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(20, 16, 20, 16)
         body_layout.setSpacing(10)
 
-        # Second tool row: mapped count + clear all
         toolbar = QHBoxLayout()
         toolbar.setSpacing(10)
         self.lbl_count = QLabel("0 keys mapped")
@@ -220,7 +203,6 @@ class KeyboardPage(QWidget):
         hint.setObjectName("KbdHint")
         body_layout.addWidget(hint)
 
-        # Keyboard board
         self.board_container = QWidget()
         self.board_container.setObjectName("KbdBoard")
         self.grid = QVBoxLayout(self.board_container)
@@ -254,8 +236,6 @@ class KeyboardPage(QWidget):
 
         self._load_stylesheet()
 
-    # ---- Presets ----
-
     def load_presets(self):
         presets = self.keyboard_repo.get_presets(self.language_id)
         if not presets:
@@ -268,7 +248,6 @@ class KeyboardPage(QWidget):
             self.combo_presets.addItem(p["name"], p["id"])
         self.combo_presets.blockSignals(False)
 
-        # Select first preset (or keep current if still exists)
         if self._current_preset_id:
             idx = self.combo_presets.findData(self._current_preset_id)
             if idx >= 0:
@@ -325,8 +304,6 @@ class KeyboardPage(QWidget):
             self._current_preset_id = None
             self.load_presets()
 
-    # ---- Key mapping ----
-
     def _on_key_clicked(self):
         btn = self.sender()
         if not btn:
@@ -367,16 +344,12 @@ class KeyboardPage(QWidget):
             self.refresh()
 
     def _save_and_rebuild(self):
-        """Save this preset's mappings and rebuild the language font from ALL
-        glyphs, so assigned glyphs become typeable characters everywhere in the app."""
         if not self._current_preset_id:
             QMessageBox.information(self, "No Preset", "Select or create a preset first.")
             return
 
-        # Pint the current combo selection into the current preset (edits are per-key)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            # 1. Rebuild the font from ALL glyphs (export_service pipeline)
             glyph_rows = self.glyph_repo.get_all_glyphs(self.language_id)
             if not glyph_rows:
                 QMessageBox.warning(
@@ -388,11 +361,9 @@ class KeyboardPage(QWidget):
             from font_tools.font_registry import get_fonts_dir, register_language_font
             fonts_dir = get_fonts_dir(self.data_dir) if self.data_dir else self.data_dir
             result = export_language_font(glyph_rows, fonts_dir)
-            # 2. Register the new font with Qt so PPUA chars render immediately
             register_language_font(self.data_dir)
             self._load_font_mapping()
 
-            # 3. Sync PPUA into the current preset's glyph mappings
             for m in self.keyboard_repo.get_all_mappings(self._current_preset_id):
                 gid = m.get("glyph_id")
                 if gid and gid in self._font_mapping:
@@ -421,8 +392,6 @@ class KeyboardPage(QWidget):
             QApplication.restoreOverrideCursor()
         self.refresh()
 
-    # ---- Refresh ----
-
     def _set_key_style(self, btn, object_name: str):
         btn.setObjectName(object_name)
         btn.style().unpolish(btn)
@@ -441,7 +410,6 @@ class KeyboardPage(QWidget):
             if m and (m.get("assignment") or m.get("glyph_id")):
                 mapped += 1
                 self._set_key_style(btn, "KeyCapAssigned")
-                # Show glyph icon (preferred) or assigned character
                 if m.get("glyph_id"):
                     glyph = self.keyboard_repo.get_glyph(m["glyph_id"])
                     icon = _render_glyph_icon(glyph.get("svg_data", ""), 32) if glyph else None

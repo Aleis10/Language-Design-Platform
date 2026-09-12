@@ -1,8 +1,6 @@
-/* ═══════════════════════════════════════════════════════════════
-   Grammar Page Stylesheet
-   ═══════════════════════════════════════════════════════════════ */
+/* Grammar Page Stylesheet */
 
-/* ── Tab Bar ─────────────────────────────────────────────────── */
+/* Tab Bar */
 
 QWidget#GrammarTabBar {
     background-color: #ffffff;
@@ -30,7 +28,7 @@ QWidget#GrammarTabBar {
     border-bottom: 3px solid #007acc;
 }
 
-/* ── Header & Labels ─────────────────────────────────────────── */
+/* Header & Labels */
 
 QLabel#GrammarTitle {
     font-size: 16px;
@@ -61,7 +59,7 @@ QLabel#GrammarLabelHint {
     font-weight: bold;
 }
 
-/* ── Buttons ─────────────────────────────────────────────────── */
+/* Buttons */
 
 QPushButton#GrammarBtnAdd {
     background-color: #007acc;
@@ -106,14 +104,14 @@ QPushButton#GrammarCatBtn:hover {
     background-color: #e0e0e0;
 }
 
-/* ── Scroll Areas ────────────────────────────────────────────── */
+/* Scroll Areas */
 
 QScrollArea#GrammarScroll {
     border: none;
     background: transparent;
 }
 
-/* ── Category Cards ──────────────────────────────────────────── */
+/* Category Cards */
 
 QFrame.GrammarCategoryCard {
     background-color: #ffffff;
@@ -152,7 +150,7 @@ QLabel#GrammarCatDesc {
     margin-left: 6px;
 }
 
-/* ── Rules Table ─────────────────────────────────────────────── */
+/* Rules Table */
 
 QTableWidget#GrammarRulesTable {
     background-color: #ffffff;
@@ -178,7 +176,7 @@ QTableWidget#GrammarRulesTable QHeaderView::section {
     color: #333333;
 }
 
-/* ── Paradigm Cards ──────────────────────────────────────────── */
+/* Paradigm Cards */
 
 QFrame.GrammarParadigmCard {
     background-color: #ffffff;
@@ -203,7 +201,7 @@ QLabel#GrammarParadigmDesc {
     margin-left: 8px;
 }
 
-/* ── Paradigm Grid Table (inside cards & dialog) ─────────────── */
+/* Paradigm Grid Table (inside cards & dialog) */
 
 QTableWidget#GrammarParadigmTable {
     background-color: #ffffff;
@@ -231,7 +229,7 @@ QTableWidget#GrammarParadigmTable QHeaderView::section {
     font-size: 12px;
 }
 
-/* ── Templates Table ─────────────────────────────────────────── */
+/* Templates Table */
 
 QTableWidget#GrammarTemplatesTable {
     background-color: #ffffff;
@@ -257,7 +255,7 @@ QTableWidget#GrammarTemplatesTable QHeaderView::section {
     color: #333333;
 }
 
-/* ── Dialogs (inherited from page scope) ─────────────────────── */
+/* Dialogs (inherited from page scope) */
 
 QDialog {
     background-color: #ffffff;

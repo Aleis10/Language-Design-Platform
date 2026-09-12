@@ -30,26 +30,16 @@ except (ImportError, ValueError):
     from ..database.grammar_db import GrammarRepository
     from ..database.archive_manager import ProjectArchiveManager
 
-
 class _ConlangFontFilter(QObject):
-    """Installs the conlang font on every editable text widget automatically.
-
-    Once a language font is registered (session_dir), any QLineEdit / QTextEdit /
-    QPlainTextEdit / QComboBox that appears gets the conlang font so PPUA glyph
-    characters render as logograms everywhere (Latin still falls back).
-
-    The font is registered AT MOST ONCE (cached family); we never re-add the font
-    file to QFontDatabase per event, which is crash-prone with QtMultimedia."""
 
     def __init__(self, data_dir: str = "", parent=None):
         super().__init__(parent)
         self.data_dir = data_dir
         self._family = None
         self._registered = False
-        self._queued = set()  # ids of widgets already scheduled for font apply
+        self._queued = set() 
 
     def refresh_family(self):
-        """Register the font once and cache the family name."""
         if self._registered:
             return self._family
         self._registered = True
@@ -64,9 +54,7 @@ class _ConlangFontFilter(QObject):
         return self._family
 
     def eventFilter(self, obj, event):
-        # Catch both polish and child-added, but DEFER font application to the
-        # next event-loop iteration via a zero-timer — never set fonts during
-        # widget construction (crash risk with QtMultimedia).
+ 
         if event.type() in (QEvent.Type.Polish, QEvent.Type.ChildAdded):
             self._defer_apply(obj)
         return super().eventFilter(obj, event)
@@ -88,26 +76,20 @@ class _ConlangFontFilter(QObject):
         try:
             cur = w.font().family()
             if cur == family:
-                return  # already applied; avoid churn
+                return  
             w.setFont(QFont(family, w.font().pointSize() or 12))
         except Exception:
             pass
 
-
 class _ConlangModeController(QObject):
-    """Tracks Conlang mode (physical keys → glyphs) and notifies listeners.
-
-    When active, physical keypresses on mapped keys insert the glyph into the
-    focused field (handled in MainWindow's event filter); the OSK mirrors by
-    highlighting the pressed key."""
 
     mode_changed = Signal(bool)
-    key_pressed = Signal(str)   # key_code (e.g. "a", "k") for OSK highlight
+    key_pressed = Signal(str)  
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._active = False
-        self.key_to_glyph: Dict[str, Dict] = {}  # key_code -> mapping
+        self.key_to_glyph: Dict[str, Dict] = {} 
 
     @property
     def active(self) -> bool:
@@ -122,8 +104,7 @@ class _ConlangModeController(QObject):
         self.key_to_glyph = mappings
 
     def glyph_for_key(self, key_code: str) -> Optional[str]:
-        """Return the character this physical key should type in Conlang mode,
-        or None if the key isn't mapped."""
+
         m = self.key_to_glyph.get(key_code)
         if not m:
             return None
@@ -131,11 +112,9 @@ class _ConlangModeController(QObject):
         if char:
             return char
         ppua = m.get("ppua") or ""
-        # Only use ppua if it's a real character, not a "U+XXXX" label
         if ppua and not ppua.startswith("U+"):
             return ppua
         return None
-
 
 class MainWindow(QMainWindow):
     def __init__(
@@ -169,7 +148,6 @@ class MainWindow(QMainWindow):
         self.session_dir = session_dir
         self.archive_manager = archive_manager or ProjectArchiveManager
 
-        # Register any exported conlang font so PPUA glyph chars render
         if self.session_dir:
             try:
                 from font_tools.font_registry import register_language_font
@@ -180,16 +158,13 @@ class MainWindow(QMainWindow):
         self._update_window_title()
         self.resize(1400, 950)
 
-        # 1. Top Desktop File Menu Bar
         self._setup_menu_bar()
 
-        # 2. Main Front Layout
         central_widget = QWidget()
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # 3. Stacked Pages
         self.overview_page = Overview_Page(
             overview_repo=self.overview_repo,
             language_id=self.language_id,
@@ -224,30 +199,25 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self.lexicon_page)
         self.pages.addWidget(self.grammar_page)
 
-        # Sidebar
         self.sidebar = Sidebar(on_page_changed_callback=self.pages.setCurrentIndex)
 
-        # Assemble
         main_layout.addWidget(self.sidebar, stretch=0)
         main_layout.addWidget(self.pages, stretch=1)
 
         self.setCentralWidget(central_widget)
 
-        # Floating digital-keyboard launcher (bottom-right) + popup panel
+ # digital-keyboard 
         self.osk = None
         self.kbd_button = FloatingKeyboardButton()
         self.kbd_button.toggled_on.connect(self._toggle_osk)
         self._install_floating_kbd()
 
-        # App-wide conlang font: apply to every editable text widget so glyphs
-        # render anywhere in the app (per language), not just lexicon.
         self.conlang_font_filter = _ConlangFontFilter(data_dir=self.session_dir or "", parent=self)
         app_instance = QApplication.instance()
         if app_instance is not None:
             app_instance.installEventFilter(self.conlang_font_filter)
         self.conlang_font_filter.refresh_family()
 
-        # Conlang mode: physical keys → glyphs (toggle via Ctrl+Shift+Space)
         self.conlang_mode = _ConlangModeController(parent=self)
         self.conlang_mode.mode_changed.connect(self._on_conlang_mode_changed)
         app_instance = QApplication.instance()
@@ -262,10 +232,9 @@ class MainWindow(QMainWindow):
         arc_suffix = f" [{os.path.basename(self.archive_path)}]" if self.archive_path else ""
         self.setWindowTitle(f"Lexicography & Language Software{title_suffix}{arc_suffix}")
 
-    # ---- Digital keyboard (floating launcher + popup) ----
+ # Digital keyboard 
 
     def _install_floating_kbd(self):
-        """Pin the round keyboard button to the bottom-right corner."""
         try:
             self.kbd_button.setParent(self)
             self.kbd_button.show()
@@ -299,7 +268,6 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self.osk.closed.connect(self._on_osk_closed)
-        # Mirror physical keypresses onto the OSK
         self.conlang_mode.key_pressed.connect(self.osk.highlight_key)
         self.osk.conlang_toggle_requested.connect(self.toggle_conlang_mode)
         self.osk.set_conlang_mode(self.conlang_mode.active)
@@ -329,10 +297,8 @@ class MainWindow(QMainWindow):
         if self.kbd_button:
             self.kbd_button.setChecked(False)
 
-    # ---- Conlang mode (physical keys -> glyphs) ----
-
     def _setup_conlang_hotkey(self):
-        """Ctrl+Shift+Space toggles Conlang mode (like an IME switch)."""
+ # Ctrl+Shift+Space toggles 
         try:
             self._conlang_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Space"), self)
             self._conlang_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
@@ -341,7 +307,6 @@ class MainWindow(QMainWindow):
             self._conlang_shortcut = None
 
     def _setup_conlang_indicator(self):
-        """A small label on the status bar showing Conlang mode state."""
         try:
             self.conlang_indicator = QLabel("CONLANG: OFF")
             self.conlang_indicator.setToolTip("Conlang mode — press Ctrl+Shift+Space to toggle")
@@ -369,7 +334,6 @@ class MainWindow(QMainWindow):
 
     def _on_conlang_mode_changed(self, on: bool):
         self._style_conlang_indicator(on)
-        # Mirror the mode on the OSK, if open
         if self.osk is not None and hasattr(self.osk, "set_conlang_mode"):
             self.osk.set_conlang_mode(on)
         try:
@@ -380,7 +344,6 @@ class MainWindow(QMainWindow):
             pass
 
     def _reload_conlang_mappings(self):
-        """Build key_code -> {char, glyph_id, ppua} from the current project."""
         mappings: Dict[str, Dict] = {}
         if self.keyboard_repo and self.language_id:
             try:
@@ -400,15 +363,12 @@ class MainWindow(QMainWindow):
         self.conlang_mode.set_mappings(mappings)
 
     def eventFilter(self, obj, event):
-        """When Conlang mode is ON, translate a mapped physical keypress into its
-        glyph and swallow the original Latin character."""
         if event.type() == QEvent.Type.KeyPress and self.conlang_mode.active \
                 and not event.isAutoRepeat():
             key_code = self._qkey_to_key_code(event)
             if key_code:
                 glyph = self.conlang_mode.glyph_for_key(key_code)
                 if glyph:
-                    # Mirror on the OSK
                     self.conlang_mode.key_pressed.emit(key_code)
                     self._insert_into_focus(glyph)
                     return True  # swallow the original key
@@ -416,12 +376,10 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _qkey_to_key_code(event) -> Optional[str]:
-        """Map a Qt key event to the OSK/QWERTY key_code (letter or symbol)."""
         key = event.key()
         text = event.text()
         if text and len(text) == 1 and text.isprintable() and text in "`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./":
             return text
-        # fallback: letters/digits from the key enum
         if Qt.Key.Key_A <= key <= Qt.Key.Key_Z:
             return chr(ord('a') + (key - Qt.Key.Key_A))
         if Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
@@ -429,7 +387,6 @@ class MainWindow(QMainWindow):
         return None
 
     def _insert_into_focus(self, text: str):
-        """Insert text into the currently focused editable widget."""
         w = QApplication.focusWidget()
         if w is None:
             return
@@ -448,8 +405,6 @@ class MainWindow(QMainWindow):
                 setter(str(getter()) + text)
             except Exception:
                 pass
-
-    # ---- Menu bar ----
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -487,14 +442,11 @@ class MainWindow(QMainWindow):
         file_menu.addAction(action_exit)
 
     def action_save_project(self, notify: bool = False):
-        """Flushes active page edits and packs the working session into the .langarc archive."""
-        # 1. Commit active page edits
         if hasattr(self, "overview_page") and hasattr(self.overview_page, "save_data"):
             self.overview_page.save_data()
         if hasattr(self, "glyphs_page") and hasattr(self.glyphs_page, "save_active_glyph"):
             self.glyphs_page.save_active_glyph(notify=False)
 
-        # 2. Pack session into .langarc
         if self.archive_path and self.session_dir and self.archive_manager:
             try:
                 self.archive_manager.save_archive(
@@ -510,7 +462,6 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Saved", "Database changes saved.")
 
     def action_save_as(self):
-        """Packs a copy of the current project to a new .langarc destination."""
         clean_name = self.project_name.lower().replace(" ", "_") if self.project_name else "language"
         default_file = f"{clean_name}.langarc"
         dialog = QFileDialog(self, "Save Copy As", default_file, "Language Archive (*.langarc);;Zip Archive (*.zip);;All Files (*)")
@@ -528,7 +479,6 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Save Error", f"Failed to save copy:\n{e}")
 
     def action_new_project(self):
-        """Prompt to create a new project and restart application context."""
         reply = QMessageBox.question(
             self, "New Project",
             "Do you want to save current changes and open the Project Hub to create a new language?",
@@ -548,7 +498,6 @@ class MainWindow(QMainWindow):
                     self._reload_project(*hub_result)
 
     def action_open_project(self):
-        """Open an existing .langarc, .zip, or .db project archive."""
         dialog = QFileDialog(self, "Open Language Archive", "",
             "Language Archive (*.langarc *.zip);;SQLite Database (*.db);;All Files (*)")
         dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
@@ -572,7 +521,6 @@ class MainWindow(QMainWindow):
         self._reload_project(file_path, project_name, False)
 
     def _reload_project(self, archive_or_db_path, project_name, is_new_project):
-        """Tears down current session and boots a new project context."""
         try:
             from database.db_Manager import Database_Manager
             from database.overview_db import LanguageOverviewRepository
@@ -638,8 +586,6 @@ class MainWindow(QMainWindow):
         self._rebuild_pages()
 
     def _rebuild_pages(self):
-        """Rebuild the stacked pages against freshly loaded repositories."""
-        # Register the exported conlang font (PPUA glyph chars render in text fields)
         if self.session_dir:
             try:
                 from font_tools.font_registry import register_language_font
@@ -683,7 +629,6 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Loaded: {self.project_name}", 4000)
 
     def closeEvent(self, event):
-        """Auto-save changes into .langarc archive upon exiting."""
         if self.archive_path and self.session_dir and self.archive_manager:
             try:
                 self.archive_manager.save_archive(

@@ -5,7 +5,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-
 class ProjectHub(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -15,12 +14,10 @@ class ProjectHub(QDialog):
 
         self.setObjectName("ProjectHubDialog")
 
-        # Path to save
         self.selected_db_path = None
         self.project_name = None
         self.is_new_project = False
 
-        # Main layout
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(24, 24, 24, 24)
 
@@ -32,10 +29,8 @@ class ProjectHub(QDialog):
         main_layout.addWidget(header_title)
         main_layout.addWidget(header_subtitle)
 
-        # New Project Form
         self.stack = QStackedWidget()
 
-        # Start Menu
         menu_widget = QWidget()
         menu_layout = QVBoxLayout(menu_widget)
         menu_layout.setSpacing(12)
@@ -53,7 +48,6 @@ class ProjectHub(QDialog):
         menu_layout.addWidget(btn_open)
         menu_layout.addStretch()
 
-        # New project layout
         form_widget = QWidget()
         form_layout = QVBoxLayout(form_widget)
         form_layout.setSpacing(8)
@@ -100,13 +94,11 @@ class ProjectHub(QDialog):
         form_layout.addSpacing(16)
         form_layout.addLayout(btn_box)
 
-        # Add both views to stack
         self.stack.addWidget(menu_widget)
         self.stack.addWidget(form_widget)
 
         main_layout.addWidget(self.stack)
 
-        # Load QSS Stylesheet
         self._load_stylesheet()
 
     def _load_stylesheet(self):
@@ -156,7 +148,6 @@ class ProjectHub(QDialog):
             self.is_new_project = False
             self.accept()
 
-#Launches Project hub
 def run_project_hub():
     dialog = ProjectHub()
     if dialog.exec() == QDialog.Accepted and dialog.selected_db_path:

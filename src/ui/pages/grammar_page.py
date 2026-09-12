@@ -15,13 +15,7 @@ try:
 except ImportError:
     from ..database.grammar_db import GrammarRepository
 
-
 AFFIX_TYPES = ["prefix", "suffix", "infix", "circumfix", "suprafix", "other"]
-
-
-# ═══════════════════════════════════════════════════════════════
-#  DIALOG: Add / Edit Affix Rule
-# ═══════════════════════════════════════════════════════════════
 
 class _RuleDialog(QDialog):
     def __init__(self, parent=None, data: Optional[dict] = None, categories: Optional[List[dict]] = None):
@@ -102,11 +96,6 @@ class _RuleDialog(QDialog):
             "category_id": self.input_category.currentData(),
         }
 
-
-# ═══════════════════════════════════════════════════════════════
-#  DIALOG: Add / Edit Category
-# ═══════════════════════════════════════════════════════════════
-
 class _CategoryDialog(QDialog):
     def __init__(self, parent=None, data: Optional[dict] = None):
         super().__init__(parent)
@@ -149,11 +138,6 @@ class _CategoryDialog(QDialog):
             "description": self.input_desc.text().strip(),
         }
 
-
-# ═══════════════════════════════════════════════════════════════
-#  DIALOG: Add / Edit Paradigm Grid
-# ═══════════════════════════════════════════════════════════════
-
 class _ParadigmDialog(QDialog):
     def __init__(self, parent=None, data: Optional[dict] = None):
         super().__init__(parent)
@@ -190,7 +174,6 @@ class _ParadigmDialog(QDialog):
 
         layout.addLayout(form)
 
-        # Editable table preview
         lbl_hint = QLabel("Fill in the paradigm cells below:")
         lbl_hint.setObjectName("GrammarLabelHint")
         layout.addWidget(lbl_hint)
@@ -211,7 +194,6 @@ class _ParadigmDialog(QDialog):
         btns_row.addWidget(btn_save)
         layout.addLayout(btns_row)
 
-        # Prefill if editing
         if data:
             self.input_name.setText(data.get("name", ""))
             self.input_desc.setText(data.get("description", ""))
@@ -222,11 +204,9 @@ class _ParadigmDialog(QDialog):
             if rows:
                 self.spin_rows.setValue(max(len(rows), 1))
             self._rebuild_preview()
-            # Fill headers
             for ci, h in enumerate(hdrs):
                 if ci < self.table.columnCount():
                     self.table.setItem(0, ci, QTableWidgetItem(str(h)))
-            # Fill rows
             for ri, row_data in enumerate(rows):
                 for ci, cell in enumerate(row_data):
                     if ri + 1 < self.table.rowCount() and ci < self.table.columnCount():
@@ -275,11 +255,6 @@ class _ParadigmDialog(QDialog):
             "headers": ["Form \\ Feature"] + headers,
             "rows": grid_rows,
         }
-
-
-# ═══════════════════════════════════════════════════════════════
-#  DIALOG: Add / Edit Phrase Template
-# ═══════════════════════════════════════════════════════════════
 
 class _TemplateDialog(QDialog):
     def __init__(self, parent=None, data: Optional[dict] = None):
@@ -345,11 +320,6 @@ class _TemplateDialog(QDialog):
             "notes": self.input_notes.toPlainText().strip(),
         }
 
-
-# ═══════════════════════════════════════════════════════════════
-#  MAIN GRAMMAR PAGE
-# ═══════════════════════════════════════════════════════════════
-
 class GrammarPage(QWidget):
     def __init__(self, grammar_repo: GrammarRepository, language_id: str, parent=None):
         super().__init__(parent)
@@ -369,14 +339,11 @@ class GrammarPage(QWidget):
             with open(style_path, "r", encoding="utf-8") as f:
                 self.setStyleSheet(f.read())
 
-    # ── BUILD UI ────────────────────────────────────────────────
-
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Top tab bar
         tab_bar = QWidget()
         tab_bar.setObjectName("GrammarTabBar")
         tab_layout = QHBoxLayout(tab_bar)
@@ -395,21 +362,16 @@ class GrammarPage(QWidget):
         tab_layout.addStretch()
         root.addWidget(tab_bar)
 
-        # Separator line
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet("color: #e0e0e0;")
         root.addWidget(sep)
 
-        # Stacked content
         self.stack = QStackedWidget()
         root.addWidget(self.stack, stretch=1)
 
-        # Tab 0: Rules
         self._build_rules_tab()
-        # Tab 1: Paradigms
         self._build_paradigms_tab()
-        # Tab 2: Templates
         self._build_templates_tab()
 
     def _switch_tab(self, idx: int):
@@ -417,15 +379,12 @@ class GrammarPage(QWidget):
             btn.setChecked(i == idx)
         self.stack.setCurrentIndex(idx)
 
-    # ── TAB 0: AFFIX RULES ─────────────────────────────────────
-
     def _build_rules_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Top bar (white, full width)
         top_bar = QWidget()
         top_bar.setObjectName("GrammarTopBar")
         top = QHBoxLayout(top_bar)
@@ -458,7 +417,6 @@ class GrammarPage(QWidget):
 
         top.addStretch()
 
-        # Category filter
         lbl_filter = QLabel("Filter:")
         lbl_filter.setStyleSheet("font-size: 12px; color: #666666;")
         top.addWidget(lbl_filter)
@@ -470,18 +428,15 @@ class GrammarPage(QWidget):
 
         layout.addWidget(top_bar)
 
-        # Body (padding under bar)
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(20, 16, 20, 16)
         body_layout.setSpacing(12)
 
-        # Info hint
         hint = QLabel("Organize grammar rules by category. Used by the interlinear parser for morphological stripping.")
         hint.setObjectName("GrammarHint")
         body_layout.addWidget(hint)
 
-        # Category cards area
         self.categories_scroll = QScrollArea()
         self.categories_scroll.setObjectName("GrammarScroll")
         self.categories_scroll.setWidgetResizable(True)
@@ -493,7 +448,6 @@ class GrammarPage(QWidget):
         self.categories_scroll.setWidget(self.categories_container)
         body_layout.addWidget(self.categories_scroll, stretch=1)
 
-        # Rules table
         self.rules_table = QTableWidget()
         self.rules_table.setObjectName("GrammarRulesTable")
         self.rules_table.setColumnCount(7)
@@ -509,7 +463,6 @@ class GrammarPage(QWidget):
         self.rules_table.setColumnHidden(6, True)
         body_layout.addWidget(self.rules_table, stretch=2)
 
-        # Count footer
         self.lbl_rules_count = QLabel("0 rules")
         self.lbl_rules_count.setObjectName("GrammarCount")
         body_layout.addWidget(self.lbl_rules_count)
@@ -517,15 +470,12 @@ class GrammarPage(QWidget):
         layout.addWidget(body, stretch=1)
         self.stack.addWidget(page)
 
-    # ── TAB 1: PARADIGM GRIDS ──────────────────────────────────
-
     def _build_paradigms_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Top bar (white, full width)
         top_bar = QWidget()
         top_bar.setObjectName("GrammarTopBar")
         top = QHBoxLayout(top_bar)
@@ -554,7 +504,6 @@ class GrammarPage(QWidget):
         top.addStretch()
         layout.addWidget(top_bar)
 
-        # Body (padding under bar)
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(20, 16, 20, 16)
@@ -578,15 +527,12 @@ class GrammarPage(QWidget):
         layout.addWidget(body, stretch=1)
         self.stack.addWidget(page)
 
-    # ── TAB 2: PHRASE TEMPLATES ────────────────────────────────
-
     def _build_templates_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Top bar (white, full width)
         top_bar = QWidget()
         top_bar.setObjectName("GrammarTopBar")
         top = QHBoxLayout(top_bar)
@@ -615,7 +561,6 @@ class GrammarPage(QWidget):
         top.addStretch()
         layout.addWidget(top_bar)
 
-        # Body (padding under bar)
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(20, 16, 20, 16)
@@ -648,8 +593,6 @@ class GrammarPage(QWidget):
         layout.addWidget(body, stretch=1)
         self.stack.addWidget(page)
 
-    # ── REFRESH ─────────────────────────────────────────────────
-
     def refresh_rules(self):
         self._refresh_category_filter()
         self._refresh_rules_table()
@@ -663,7 +606,6 @@ class GrammarPage(QWidget):
         self.combo_category_filter.addItem("All Rules", None)
         for cat in categories:
             self.combo_category_filter.addItem(cat["name"], cat["id"])
-        # Restore previous selection
         if prev:
             idx = self.combo_category_filter.findData(prev)
             if idx >= 0:
@@ -687,7 +629,6 @@ class GrammarPage(QWidget):
         self.lbl_rules_count.setText(f"{len(rules)} rule{'s' if len(rules) != 1 else ''}")
 
     def _refresh_category_cards(self):
-        # Clear existing
         while self.categories_layout.count():
             item = self.categories_layout.takeAt(0)
             widget = item.widget()
@@ -709,7 +650,6 @@ class GrammarPage(QWidget):
             card_layout.setContentsMargins(12, 8, 12, 8)
             card_layout.setSpacing(10)
 
-            # Count rules in this category
             rules_in_cat = self.grammar_repo.get_rules(self.language_id, cat["id"])
             count_badge = QLabel(f"{len(rules_in_cat)}")
             count_badge.setObjectName("GrammarCatBadge")
@@ -739,7 +679,6 @@ class GrammarPage(QWidget):
             self.categories_layout.addWidget(card)
 
     def refresh_paradigms(self):
-        # Clear existing
         while self.paradigms_layout.count():
             item = self.paradigms_layout.takeAt(0)
             widget = item.widget()
@@ -761,7 +700,6 @@ class GrammarPage(QWidget):
             card_layout.setContentsMargins(12, 12, 12, 12)
             card_layout.setSpacing(8)
 
-            # Header
             header = QHBoxLayout()
             title_lbl = QLabel(grid["name"])
             title_lbl.setObjectName("GrammarParadigmTitle")
@@ -774,12 +712,10 @@ class GrammarPage(QWidget):
 
             header.addStretch()
 
-            # Store ID on the card for selection
             card.setProperty("paradigm_id", grid["id"])
 
             card_layout.addLayout(header)
 
-            # Table preview
             headers = grid.get("headers", [])
             rows = grid.get("rows", [])
             if headers:
@@ -789,11 +725,9 @@ class GrammarPage(QWidget):
                 tbl.verticalHeader().setVisible(False)
                 tbl.setAlternatingRowColors(True)
 
-                # Headers row
                 for ci, h in enumerate(headers):
                     tbl.setItem(0, ci, QTableWidgetItem(str(h)))
 
-                # Data rows
                 for ri, row_data in enumerate(rows):
                     for ci, cell in enumerate(row_data):
                         tbl.setItem(ri + 1, ci, QTableWidgetItem(str(cell)))
@@ -820,8 +754,6 @@ class GrammarPage(QWidget):
         self._current_category_filter = self.combo_category_filter.currentData()
         self._refresh_rules_table()
 
-    # ── SELECTION HELPERS ───────────────────────────────────────
-
     def _selected_rule_id(self) -> Optional[str]:
         rows = self.rules_table.selectionModel().selectedRows()
         if not rows:
@@ -836,18 +768,13 @@ class GrammarPage(QWidget):
 
     def _selected_paradigm_id(self) -> Optional[str]:
         rows = self.paradigms_scroll.widget().findChildren(QFrame)
-        # Use the paradigm cards and check if selected
-        # Simple approach: find selected card by checking selection
         for card in self.paradigms_container.findChildren(QFrame):
             if card.property("paradigm_id") and card.property("paradigm_id") != "":
-                # Check if any child table has selection
                 tables = card.findChildren(QTableWidget)
                 for tbl in tables:
                     if tbl.selectionModel().selectedRows():
                         return card.property("paradigm_id")
         return None
-
-    # ── RULE CRUD ───────────────────────────────────────────────
 
     def _add_rule(self):
         categories = self.grammar_repo.get_categories(self.language_id)
@@ -901,8 +828,6 @@ class GrammarPage(QWidget):
             self.grammar_repo.delete_rule(rule_id)
             self.refresh_rules()
 
-    # ── CATEGORY CRUD ───────────────────────────────────────────
-
     def _add_category(self):
         dlg = _CategoryDialog(self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
@@ -932,8 +857,6 @@ class GrammarPage(QWidget):
         if res == QMessageBox.StandardButton.Yes:
             self.grammar_repo.delete_category(cat["id"])
             self.refresh_rules()
-
-    # ── PARADIGM CRUD ───────────────────────────────────────────
 
     def _add_paradigm(self):
         dlg = _ParadigmDialog(self)
@@ -988,8 +911,6 @@ class GrammarPage(QWidget):
             self.grammar_repo.delete_paradigm(grid_id)
             self.refresh_paradigms()
 
-    # ── TEMPLATE CRUD ───────────────────────────────────────────
-
     def _add_template(self):
         dlg = _TemplateDialog(self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
@@ -1011,7 +932,6 @@ class GrammarPage(QWidget):
         if not tpl_id:
             QMessageBox.information(self, "No selection", "Select a template to edit.")
             return
-        # Find the template data from current table
         row = None
         for ri in range(self.templates_table.rowCount()):
             item = self.templates_table.item(ri, 5)

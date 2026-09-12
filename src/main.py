@@ -14,22 +14,18 @@ from database.keyboard_db import KeyboardRepository
 from database.grammar_db import GrammarRepository
 from database.archive_manager import ProjectArchiveManager
 
-
 def load_stylesheet(app: QApplication, filepath: str) -> None:
     if os.path.exists(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
             app.setStyleSheet(f.read())
 
-
 def main():
     app = QApplication(sys.argv)
 
-    # QSS Stylesheet
     base_dir = os.path.dirname(os.path.abspath(__file__))
     qss_path = os.path.join(base_dir, "ui", "pages", "style", "overview_page.qss")
     load_stylesheet(app, qss_path)
 
-    # Launch project dashboard / hub
     hub_result = run_project_hub()
     if not hub_result:
         sys.exit(0)
@@ -39,7 +35,6 @@ def main():
     if not project_name:
         project_name = os.path.splitext(os.path.basename(archive_or_db_path))[0].replace("_", " ").title() or "Untitled Language"
 
-    # Route between .langarc/.zip archive packages
     if archive_or_db_path.endswith(".langarc"):
         archive_path = archive_or_db_path
         if is_new_project:
@@ -51,7 +46,6 @@ def main():
             keyboard_repo = KeyboardRepository(db_manager)
             grammar_repo = GrammarRepository(db_manager)
             language_id = overview_repo.create_initial_language(project_name)
-            # Create initial packaged .langarc
             ProjectArchiveManager.save_archive(session_dir, archive_path, project_name)
         else:
             session_dir, db_path, stored_name = ProjectArchiveManager.open_archive(archive_path)
@@ -67,7 +61,6 @@ def main():
             if not language_id:
                 language_id = overview_repo.create_initial_language(project_name)
     else:
-        # Direct raw .db file fallback
         archive_path = None
         db_path = archive_or_db_path
         session_dir = os.path.dirname(db_path)
@@ -89,7 +82,6 @@ def main():
             else:
                 language_id = overview_repo.create_initial_language(project_name)
 
-    # Launch Main Window
     window = MainWindow(
         db_manager=db_manager,
         overview_repo=overview_repo,
@@ -107,7 +99,6 @@ def main():
     window.show()
 
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()

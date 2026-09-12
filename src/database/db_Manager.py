@@ -2,22 +2,18 @@ import sqlite3
 import os
 from contextlib import contextmanager
 
-
 class Database_Manager:
     def __init__(self, db_path: str):
         self.db_path = os.path.abspath(db_path)
         
-        # 1. Ensure target directory exists on disk
         db_dir = os.path.dirname(self.db_path)
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir, exist_ok=True)
 
-        # 2. Initialize database schemas & write initial structure
         self._init_db()
 
     @contextmanager
     def get_connection(self):
-        """Provides a transactional database connection context."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
@@ -31,9 +27,7 @@ class Database_Manager:
             conn.close()
 
     def _init_db(self):
-        """Creates table schemas and forces physical file creation."""
         with self.get_connection() as conn:
-            # 1. Master Languages Table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS languages (
                     id TEXT PRIMARY KEY,
@@ -43,7 +37,6 @@ class Database_Manager:
                 );
             """)
 
-            # 2. Language Overview Core Table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS language_overview (
                     language_id TEXT PRIMARY KEY,
@@ -62,7 +55,6 @@ class Database_Manager:
                 );
             """)
 
-            # 3. Dynamic Custom Sections Table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS overview_custom_sections (
                     id TEXT PRIMARY KEY,

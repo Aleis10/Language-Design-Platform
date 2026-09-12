@@ -5,7 +5,6 @@ try:
 except ImportError:
     from .db_Manager import Database_Manager
 
-
 class GrammarRepository:
     def __init__(self, db_manager: Database_Manager):
         self.db_manager = db_manager
@@ -15,7 +14,6 @@ class GrammarRepository:
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
 
-            # 1. Grammar Categories (e.g., Noun Classes, Tense, Aspect)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS grammar_categories (
                     id TEXT PRIMARY KEY,
@@ -28,7 +26,6 @@ class GrammarRepository:
                 );
             """)
 
-            # 2. Affix / Grammar Rules
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS grammar_rules (
                     id TEXT PRIMARY KEY,
@@ -47,7 +44,6 @@ class GrammarRepository:
                 );
             """)
 
-            # 3. Paradigm Grids (e.g., verb conjugation tables)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS paradigm_grids (
                     id TEXT PRIMARY KEY,
@@ -63,7 +59,6 @@ class GrammarRepository:
                 );
             """)
 
-            # 4. Phrase / Sentence Templates (interlinear sentence patterns)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS phrase_templates (
                     id TEXT PRIMARY KEY,
@@ -79,13 +74,12 @@ class GrammarRepository:
                 );
             """)
 
-            # Index for fast rule lookup by language
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_grammar_rules_lang
                 ON grammar_rules(language_id, position);
             """)
 
-            # Migration: add missing columns for existing projects
+ # Migration: add missing columns for existing projects
             cursor.execute("PRAGMA table_info(grammar_rules);")
             existing_cols = {row["name"] for row in cursor.fetchall()}
             migrations = {
@@ -100,8 +94,6 @@ class GrammarRepository:
             for col, col_def in migrations.items():
                 if col not in existing_cols:
                     cursor.execute(f"ALTER TABLE grammar_rules ADD COLUMN {col} {col_def};")
-
-    # ── CATEGORIES ──────────────────────────────────────────────
 
     def get_categories(self, language_id: str) -> List[Dict[str, Any]]:
         with self.db_manager.get_connection() as conn:
@@ -138,8 +130,6 @@ class GrammarRepository:
     def delete_category(self, category_id: str):
         with self.db_manager.get_connection() as conn:
             conn.execute("DELETE FROM grammar_categories WHERE id = ?;", (category_id,))
-
-    # ── RULES ───────────────────────────────────────────────────
 
     def get_rules(self, language_id: str, category_id: Optional[str] = None) -> List[Dict[str, Any]]:
         with self.db_manager.get_connection() as conn:
@@ -214,7 +204,6 @@ class GrammarRepository:
             conn.execute("DELETE FROM grammar_rules WHERE id = ?;", (rule_id,))
 
     def get_rules_for_parser(self, language_id: str) -> List[Dict[str, Any]]:
-        """Return rules ordered longest-affix-first for the morphological parser."""
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -225,8 +214,6 @@ class GrammarRepository:
                 (language_id,),
             )
             return [dict(row) for row in cursor.fetchall()]
-
-    # ── PARADIGM GRIDS ──────────────────────────────────────────
 
     def get_paradigms(self, language_id: str) -> List[Dict[str, Any]]:
         with self.db_manager.get_connection() as conn:
@@ -292,8 +279,6 @@ class GrammarRepository:
     def delete_paradigm(self, grid_id: str):
         with self.db_manager.get_connection() as conn:
             conn.execute("DELETE FROM paradigm_grids WHERE id = ?;", (grid_id,))
-
-    # ── PHRASE TEMPLATES ────────────────────────────────────────
 
     def get_templates(self, language_id: str) -> List[Dict[str, Any]]:
         with self.db_manager.get_connection() as conn:

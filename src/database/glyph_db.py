@@ -6,18 +6,15 @@ try:
 except ImportError:
     from .db_Manager import Database_Manager
 
-
 class GlyphRepository:
     def __init__(self, db_manager: Database_Manager):
         self.db_manager = db_manager
         self._ensure_tables()
 
     def _ensure_tables(self):
-        """Ensure glyph_groups and glyphs tables exist with all required columns."""
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             
-            # 1. Glyph Groups Table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS glyph_groups (
                     id TEXT PRIMARY KEY,
@@ -30,7 +27,6 @@ class GlyphRepository:
                 );
             """)
 
-            # 2. Glyphs Table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS glyphs (
                     id TEXT PRIMARY KEY,
@@ -49,7 +45,6 @@ class GlyphRepository:
                 );
             """)
 
-            # Schema migration safety checks
             cursor.execute("PRAGMA table_info(glyphs);")
             cols = {row["name"] for row in cursor.fetchall()}
             expected_cols = {
@@ -64,10 +59,7 @@ class GlyphRepository:
                 if col not in cols:
                     cursor.execute(f"ALTER TABLE glyphs ADD COLUMN {col} {col_def};")
 
-    # GROUP OPERATIONS
-
     def get_groups(self, language_id: str) -> List[Dict[str, Any]]:
-        """Retrieve all glyph groups for a language, ordered by position."""
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -77,7 +69,6 @@ class GlyphRepository:
             return [dict(row) for row in cursor.fetchall()]
 
     def add_group(self, language_id: str, name: str, description: str = "", position: int = 0) -> str:
-        """Create a new glyph group and return its UUID."""
         group_id = str(uuid.uuid4())
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
@@ -88,7 +79,6 @@ class GlyphRepository:
         return group_id
 
     def update_group(self, group_id: str, name: Optional[str] = None, description: Optional[str] = None, position: Optional[int] = None):
-        """Update properties of a glyph group."""
         fields = []
         params = []
         if name is not None:
@@ -110,15 +100,11 @@ class GlyphRepository:
             cursor.execute(f"UPDATE glyph_groups SET {', '.join(fields)} WHERE id = ?;", params)
 
     def delete_group(self, group_id: str):
-        """Delete a glyph group and cascade-delete its glyphs."""
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM glyph_groups WHERE id = ?;", (group_id,))
 
-    # GLYPH OPERATIONS
-
     def get_glyphs_by_group(self, group_id: str) -> List[Dict[str, Any]]:
-        """Retrieve all glyphs in a group, ordered by position."""
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -128,7 +114,6 @@ class GlyphRepository:
             return [dict(row) for row in cursor.fetchall()]
 
     def get_all_glyphs(self, language_id: str) -> List[Dict[str, Any]]:
-        """Retrieve all glyphs for a language."""
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -138,7 +123,6 @@ class GlyphRepository:
             return [dict(row) for row in cursor.fetchall()]
 
     def get_glyph(self, glyph_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieve a single glyph by ID."""
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM glyphs WHERE id = ?;", (glyph_id,))
@@ -156,7 +140,6 @@ class GlyphRepository:
         audio_path: str = "",
         position: int = 0
     ) -> str:
-        """Create a new glyph record and return its UUID."""
         glyph_id = str(uuid.uuid4())
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
@@ -181,7 +164,6 @@ class GlyphRepository:
         group_id: Optional[str] = None,
         position: Optional[int] = None
     ):
-        """Update fields of a glyph."""
         fields = []
         params = []
         if name is not None:
@@ -216,7 +198,6 @@ class GlyphRepository:
             cursor.execute(f"UPDATE glyphs SET {', '.join(fields)} WHERE id = ?;", params)
 
     def delete_glyph(self, glyph_id: str):
-        """Delete a glyph by ID."""
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM glyphs WHERE id = ?;", (glyph_id,))

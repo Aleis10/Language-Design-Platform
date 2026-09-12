@@ -5,7 +5,6 @@ try:
 except ImportError:
     from .db_Manager import Database_Manager
 
-
 class LexiconRepository:
     def __init__(self, db_manager: Database_Manager):
         self.db_manager = db_manager
@@ -15,7 +14,6 @@ class LexiconRepository:
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
 
-            # Lexicon Table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS lexicon (
                     id TEXT PRIMARY KEY,
@@ -34,13 +32,12 @@ class LexiconRepository:
                 );
             """)
 
-            # Fast exact-match lookup for parser (headword + language)
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_lexicon_lang_headword
                 ON lexicon(language_id, headword);
             """)
 
-            # Migration: add missing columns for existing .langarc projects
+ # Migration: add missing columns for existing .langarc projects
             cursor.execute("PRAGMA table_info(lexicon);")
             existing = {row["name"] for row in cursor.fetchall()}
             migrations = {
@@ -57,7 +54,6 @@ class LexiconRepository:
                 if col not in existing:
                     cursor.execute(f"ALTER TABLE lexicon ADD COLUMN {col} {col_def};")
 
-            # --- Multiple audio clips per entry, each with its own IPA reading ---
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS lexicon_audio (
@@ -78,7 +74,7 @@ class LexiconRepository:
                 """
             )
 
-            # Migration: bring over any legacy single audio_path -> lexicon_audio row
+ # Migration: bring over any legacy single audio_path -> lexicon_audio row
             cursor.execute(
                 "SELECT id, audio_path, ipa_reading FROM lexicon "
                 "WHERE audio_path IS NOT NULL AND audio_path != '';"
@@ -95,8 +91,6 @@ class LexiconRepository:
                             (str(uuid.uuid4()), entry_id, ipa or "", audio_path),
                         )
 
-    # CORE LOOKUP — used by InterlinearParser
-
     def find_by_headword(self, headword: str, language_id: str) -> Optional[Dict[str, Any]]:
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
@@ -109,8 +103,6 @@ class LexiconRepository:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    # STT PROMPT — all headwords as list
-
     def get_all_headwords(self, language_id: str) -> List[str]:
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
@@ -119,8 +111,6 @@ class LexiconRepository:
                 (language_id,),
             )
             return [row[0] for row in cursor.fetchall()]
-
-    # CRUD
 
     def add_entry(
         self,
@@ -180,7 +170,6 @@ class LexiconRepository:
                 (language_id,),
             )
             rows = [dict(row) for row in cursor.fetchall()]
-            # Attach all audio variants to each entry
             for entry in rows:
                 entry["audio_variants"] = self.get_entry_audio(entry["id"])
             return rows

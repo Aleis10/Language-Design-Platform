@@ -8,27 +8,15 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Dict, Any, Tuple, Optional
 
-
 def get_cache_root() -> str:
-    # Returns the base directory for active working sessions.
     cache_dir = os.path.expanduser("~/.cache/lexicography_platform/sessions")
     os.makedirs(cache_dir, exist_ok=True)
     return cache_dir
 
-
 class ProjectArchiveManager:
-    """
-    Manages the lifecycle of .langarc (Language Archive) packages.
-    
-    Architecture (Session Cache Pattern):
-    1. Open .langarc -> Unpacks into isolated ~/.cache/lexicography_platform/sessions/<id>/
-    2. Live editing -> Direct SQLite transactions and live WAV/SVG file writing in cache
-    3. Save (Ctrl+S / Exit) -> Checkpoints SQLite and re-packs cache into .langarc
-    """
 
     @staticmethod
     def get_session_dir_for_archive(langarc_path: str) -> str:
-        # Derive a unique, stable session cache path from the archive file path.
         norm_path = os.path.abspath(langarc_path)
         base_name = os.path.splitext(os.path.basename(norm_path))[0]
         slug = re.sub(r'[^a-zA-Z0-9_\-]', '_', base_name.lower())
@@ -49,17 +37,13 @@ class ProjectArchiveManager:
         project_name: str,
         language_type: str = "conlang_artlang"
     ) -> Tuple[str, str]:
-        """
-        Initializes a new session directory and writes the initial .langarc file.
-        Returns: (session_dir, db_path)
-        """
         langarc_path = os.path.abspath(langarc_path)
         if not (langarc_path.endswith(".langarc") or langarc_path.endswith(".zip")):
             langarc_path = f"{langarc_path}.langarc"
 
         session_dir = cls.get_session_dir_for_archive(langarc_path)
         
-        # Clean out any old session debris if starting a fresh project with same name
+ # Clean out any old session debris if starting a fresh project with same name
         for item in os.listdir(session_dir):
             item_path = os.path.join(session_dir, item)
             if os.path.isdir(item_path):
@@ -67,17 +51,14 @@ class ProjectArchiveManager:
             else:
                 os.remove(item_path)
 
-        # Recreate internal structure
         os.makedirs(os.path.join(session_dir, "database"), exist_ok=True)
         os.makedirs(os.path.join(session_dir, "audio", "glyphs"), exist_ok=True)
         os.makedirs(os.path.join(session_dir, "audio", "lexicon"), exist_ok=True)
         os.makedirs(os.path.join(session_dir, "images", "svg"), exist_ok=True)
         os.makedirs(os.path.join(session_dir, "images", "raster"), exist_ok=True)
 
-        # Database path inside session
         db_path = os.path.join(session_dir, "database", "project.db")
 
-        # Create initial manifest
         manifest = {
             "format": "lexicography_archive",
             "format_version": "1.0",
@@ -94,15 +75,10 @@ class ProjectArchiveManager:
 
     @classmethod
     def open_archive(cls, langarc_path: str) -> Tuple[str, str, str]:
-        """
-        Extracts a .langarc or .zip package into the local working session cache.
-        Returns: (session_dir, db_path, project_name)
-        """
         langarc_path = os.path.abspath(langarc_path)
         if not os.path.exists(langarc_path):
             raise FileNotFoundError(f"Archive file does not exist: {langarc_path}")
 
-        # Fallback for opening raw .db files directly
         if langarc_path.endswith(".db"):
             base_name = os.path.splitext(os.path.basename(langarc_path))[0].replace("_", " ").title()
             session_dir = os.path.dirname(langarc_path)
@@ -113,7 +89,6 @@ class ProjectArchiveManager:
 
         session_dir = cls.get_session_dir_for_archive(langarc_path)
 
-        # Extract archive contents safely
         with zipfile.ZipFile(langarc_path, "r") as zf:
             for member in zf.infolist():
                 target_path = os.path.abspath(os.path.join(session_dir, member.filename))
@@ -121,7 +96,6 @@ class ProjectArchiveManager:
                     raise PermissionError(f"Security error: path traversal in archive member: {member.filename}")
                 zf.extract(member, session_dir)
 
-        # Locate manifest.json
         manifest_path = os.path.join(session_dir, "manifest.json")
         project_name = os.path.splitext(os.path.basename(langarc_path))[0].replace("_", " ").title()
         db_relative = "database/project.db"
@@ -137,7 +111,6 @@ class ProjectArchiveManager:
 
         db_path = os.path.join(session_dir, db_relative)
         if not os.path.exists(db_path):
-            # Search for any .db file in session
             found = False
             for root, _, files in os.walk(session_dir):
                 for file in files:
@@ -154,14 +127,9 @@ class ProjectArchiveManager:
 
     @classmethod
     def save_archive(cls, session_dir: str, langarc_path: str, project_name: str = "") -> str:
-        """
-        Checkpoints SQLite and packages the entire session cache into the .langarc archive.
-        Returns the absolute path to the saved archive.
-        """
         langarc_path = os.path.abspath(langarc_path)
         os.makedirs(os.path.dirname(langarc_path), exist_ok=True)
 
-        # 1. Flush and checkpoint SQLite database if present
         db_dir = os.path.join(session_dir, "database")
         if os.path.exists(db_dir):
             for f in os.listdir(db_dir):
@@ -175,7 +143,6 @@ class ProjectArchiveManager:
                     except Exception as e:
                         print(f"[ProjectArchiveManager] SQLite checkpoint note: {e}")
 
-        # 2. Update manifest.json
         manifest_path = os.path.join(session_dir, "manifest.json")
         manifest = {}
         if os.path.exists(manifest_path):
@@ -194,19 +161,16 @@ class ProjectArchiveManager:
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
 
-        # 3. Write Zip Archive atomically (write to temp file then rename)
         tmp_archive = f"{langarc_path}.tmp"
         with zipfile.ZipFile(tmp_archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             for root, _, files in os.walk(session_dir):
                 for file in files:
                     full_file_path = os.path.join(root, file)
                     rel_arc_path = os.path.relpath(full_file_path, session_dir)
-                    # Ignore temporary SQLite locks/wal journals if any
                     if file.endswith("-journal") or file.endswith("-wal") or file.endswith("-shm"):
                         continue
                     zf.write(full_file_path, arcname=rel_arc_path)
 
-        # Atomic replacement
         if os.path.exists(langarc_path):
             os.remove(langarc_path)
         os.rename(tmp_archive, langarc_path)

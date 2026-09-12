@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
-
 IPA_CATEGORIES = {
     "Vowels": [
         "i", "y", "ɨ", "ʉ", "ɯ", "u",
@@ -32,9 +31,7 @@ IPA_CATEGORIES = {
     ]
 }
 
-
 class IPAPickerDialog(QDialog):
-    # Interactive IPA character selector dialog.
     character_selected = Signal(str)
 
     def __init__(self, target_line_edit: QLineEdit = None, parent=None):
@@ -47,18 +44,15 @@ class IPAPickerDialog(QDialog):
         main_layout.setContentsMargins(16, 16, 16, 16)
         main_layout.setSpacing(12)
 
-        # Header
         header = QLabel("Click any phonetic symbol to insert into reading:")
         header.setStyleSheet("font-weight: bold; font-size: 13px; color: #2c3e50;")
         main_layout.addWidget(header)
 
-        # Tabs for categories
         self.tabs = QTabWidget()
         for cat_name, symbols in IPA_CATEGORIES.items():
             self.tabs.addTab(self._create_grid_tab(symbols), cat_name)
         main_layout.addWidget(self.tabs)
 
-        # Bottom Bar with Close
         bottom_box = QHBoxLayout()
         btn_close = QPushButton("Done")
         btn_close.setStyleSheet("""

@@ -5,7 +5,6 @@ try:
 except ImportError:
     from .db_Manager import Database_Manager
 
-
 class KeyboardRepository:
     def __init__(self, db_manager: Database_Manager):
         self.db_manager = db_manager
@@ -15,7 +14,6 @@ class KeyboardRepository:
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
 
-            # Named keyboard presets (layouts) per language
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS keyboard_presets (
                     id TEXT PRIMARY KEY,
@@ -49,11 +47,11 @@ class KeyboardRepository:
                 ON keyboard_mappings(preset_id, key_code);
             """)
 
-            # Migration: older schema used language_id directly (no presets). Move rows into a default preset.
+ # Migration: older schema used language_id directly (no presets). Move rows into a default preset.
             cursor.execute("PRAGMA table_info(keyboard_mappings);")
             cols = {row["name"] for row in cursor.fetchall()}
             if "preset_id" not in cols:
-                # Legacy table: rename/rebuild. Simplify — add col and backfill.
+ # Legacy table: rename/rebuild. Simplify — add col and backfill.
                 cursor.execute("ALTER TABLE keyboard_mappings ADD COLUMN preset_id TEXT;")
                 cursor.execute("PRAGMA table_info(keyboard_mappings);")
                 cols = {row["name"] for row in cursor.fetchall()}
@@ -93,8 +91,6 @@ class KeyboardRepository:
             (preset_id, language_id),
         )
         return preset_id
-
-    # ---- Presets ----
 
     def get_presets(self, language_id: str) -> List[Dict[str, Any]]:
         with self.db_manager.get_connection() as conn:
@@ -139,8 +135,6 @@ class KeyboardRepository:
             conn.cursor().execute(
                 "DELETE FROM keyboard_presets WHERE id = ?;", (preset_id,)
             )
-
-    # ---- Mappings ----
 
     def set_mapping(
         self,
@@ -201,11 +195,6 @@ class KeyboardRepository:
             return [dict(row) for row in cursor.fetchall()]
 
     def all_mappings_for_language(self, language_id: str) -> List[Dict[str, Any]]:
-        """All mappings across every preset for a language.
-
-        Used by the on-screen keyboard: any key assigned in ANY preset
-        types its character (first mapping wins, ordered by created_at).
-        """
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(

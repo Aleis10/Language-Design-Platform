@@ -6,7 +6,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 
-
 class Overview_Page(QWidget):
     def __init__(self, overview_repo=None, language_id=None, parent=None):
         super().__init__(parent)
@@ -18,7 +17,6 @@ class Overview_Page(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Sticky Top Bar
         top_bar_widget = QWidget()
         top_bar_widget.setObjectName("StickyTopBar")
         top_bar = QHBoxLayout(top_bar_widget)
@@ -59,7 +57,6 @@ class Overview_Page(QWidget):
 
         main_layout.addWidget(top_bar_widget, stretch=0)
 
-        # Scrollable Container
         scroll_area = QScrollArea()
         scroll_area.setObjectName("OverviewScrollArea")
         scroll_area.setWidgetResizable(True)
@@ -69,7 +66,6 @@ class Overview_Page(QWidget):
         self.cards_layout.setContentsMargins(24, 20, 24, 24)
         self.cards_layout.setSpacing(16)
 
-        # Section 1: Language Details
         details_card = QFrame()
         details_card.setProperty("class", "overview-card")
         details_layout = QVBoxLayout(details_card)
@@ -127,7 +123,6 @@ class Overview_Page(QWidget):
         details_layout.addLayout(grid_layout)
         self.cards_layout.addWidget(details_card)
 
-        # Section 2: History Section
         history_card = QFrame()
         history_card.setProperty("class", "overview-card")
         h_layout = QVBoxLayout(history_card)
@@ -141,7 +136,6 @@ class Overview_Page(QWidget):
         h_layout.addWidget(self.text_history)
         self.cards_layout.addWidget(history_card)
 
-        # Section 3: Culture & Usage
         culture_card = QFrame()
         culture_card.setProperty("class", "overview-card")
         c_layout = QVBoxLayout(culture_card)
@@ -160,11 +154,9 @@ class Overview_Page(QWidget):
         scroll_area.setWidget(self.content_widget)
         main_layout.addWidget(scroll_area, stretch=1)
 
-        # Load persisted database values if available
         self.load_data()
 
     def load_data(self):
-        """Populates UI fields from the database."""
         if not self.overview_repo or not self.language_id:
             return
 
@@ -195,7 +187,6 @@ class Overview_Page(QWidget):
             if data.get("cultural_context"):
                 self.text_culture.setPlainText(data["cultural_context"])
 
-        # Load custom sections
         sections = self.overview_repo.get_custom_sections(self.language_id)
         for sec in sections:
             self._add_card_widget(
@@ -206,7 +197,6 @@ class Overview_Page(QWidget):
             )
 
     def save_data(self):
-        """Saves overview fields and custom sections back to the database."""
         if not self.overview_repo or not self.language_id:
             return
 
@@ -267,7 +257,6 @@ class Overview_Page(QWidget):
                     )
                 self._add_card_widget(title, type_idx, section_id=section_id)
 
-
 class Custom_Section_Dialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -291,7 +280,6 @@ class Custom_Section_Dialog(QDialog):
         form_layout.addRow("Section Type:", self.type_combo)
         layout.addLayout(form_layout)
 
-        # Action Buttons
         btn_layout = QHBoxLayout()
         self.btn_ok = QPushButton("Add Section")
         self.btn_ok.setObjectName("BtnAddSection")
@@ -308,7 +296,6 @@ class Custom_Section_Dialog(QDialog):
     def get_data(self):
         return self.title_input.text().strip(), self.type_combo.currentIndex()
 
-
 class Custom_Card(QFrame):
     def __init__(self, title: str, card_type_idx: int, section_id: str = None,
                  initial_content: str = "", overview_repo=None, on_delete_callback=None):
@@ -324,12 +311,10 @@ class Custom_Card(QFrame):
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(16, 12, 16, 12)
 
-        # Card Header
         header_layout = QHBoxLayout()
         self.title_label = QLabel(title)
         self.title_label.setProperty("class", "section-title")
 
-        # Header (Rename, Collapse & Delete)
         self.btn_rename = QPushButton()
         self.btn_rename.setIcon(QIcon("/home/pranav/Documents/Collage_R/code/Python/Lexicography/Language-Design-Platform/assets/icons/edit.svg"))
         self.btn_collapse = QPushButton("▼")
@@ -351,7 +336,7 @@ class Custom_Card(QFrame):
         header_layout.addWidget(self.btn_delete)
         self.main_layout.addLayout(header_layout)
 
-        # Content Body 
+ # Content Body 
         self.content_widget = QWidget()
         content_layout = QVBoxLayout(self.content_widget)
         content_layout.setContentsMargins(0, 6, 0, 0)
@@ -451,7 +436,6 @@ class Custom_Card(QFrame):
             self.setParent(None)
             self.deleteLater()
 
-
 class AutoResizingTextEdit(QTextEdit):
     def __init__(self, placeholder=""):
         super().__init__()
@@ -465,7 +449,6 @@ class AutoResizingTextEdit(QTextEdit):
         margins = self.contentsMargins()
         total_height = doc_height + margins.top() + margins.bottom() + 12
         self.setFixedHeight(max(80, total_height))
-
 
 class AutoResizingList(QListWidget):
     def __init__(self):

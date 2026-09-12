@@ -1,20 +1,10 @@
-"""
-Floating keyboard launcher — a circular keyboard button pinned to the
-bottom-right corner of the main window. Clicking it toggles the on-screen
-keyboard panel (OnScreenKeyboard).
-
-Only visible when a project (language) is loaded — it needs a live
-keyboard_repo + session_dir to map keys to glyph characters.
-"""
 
 import os
 from PySide6.QtWidgets import QToolButton, QWidget
 from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtGui import QIcon, QPainter, QColor, QPixmap, QPen, QBrush
 
-
 def _keyboard_icon(size: int = 28) -> QIcon:
-    """Draw a simple keyboard glyph as a pixmap icon (avoids asset dependency)."""
     pm = QPixmap(size, size)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
@@ -27,7 +17,6 @@ def _keyboard_icon(size: int = 28) -> QIcon:
     x0 = int((size - w) / 2.0)
     y0 = int((size - h) / 2.0)
     p.drawRoundedRect(x0, y0, w, h, int(size * 0.08), int(size * 0.08))
-    # Key dots
     dot = max(1, int(size * 0.045))
     p.setBrush(QBrush(QColor("#007acc")))
     p.setPen(Qt.PenStyle.NoPen)
@@ -39,9 +28,7 @@ def _keyboard_icon(size: int = 28) -> QIcon:
     p.end()
     return QIcon(pm)
 
-
 class FloatingKeyboardButton(QToolButton):
-    """Round, floating toggle button pinned bottom-right of the main window."""
 
     toggled_on = Signal()
 

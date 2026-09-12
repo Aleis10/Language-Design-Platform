@@ -5,11 +5,9 @@ from .coll_buttons import nav_button
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 ICON_DIR = os.path.join(BASE_DIR, "assets", "icons")
 
-
 def get_icon(name: str) -> str:
     path = os.path.join(ICON_DIR, name)
     return path if os.path.exists(path) else ""
-
 
 class Sidebar(QFrame):
     def __init__(self, on_page_changed_callback):
@@ -25,7 +23,6 @@ class Sidebar(QFrame):
         self.layout.setContentsMargins(8, 8, 8, 8)
         self.layout.setSpacing(6)
 
-        #Button (Hamburger mennu)
         self.btn_toggle = QPushButton("≡")
         self.btn_toggle.setFixedSize(40, 40)
         self.btn_toggle.setStyleSheet("""

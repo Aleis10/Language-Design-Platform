@@ -2,7 +2,6 @@ import uuid
 from typing import Dict, List, Any, Optional
 from database.db_Manager import Database_Manager
 
-
 class LanguageOverviewRepository:
     def __init__(self, db_manager: Database_Manager):
         self.db = db_manager
@@ -25,7 +24,6 @@ class LanguageOverviewRepository:
             row = conn.execute("SELECT id FROM languages LIMIT 1;").fetchone()
             return row["id"] if row else None
 
-    # Overview data retrive
     def get_overview_data(self, language_id: str) -> Optional[Dict[str, Any]]:
         with self.db.get_connection() as conn:
             row = conn.execute(
@@ -47,7 +45,6 @@ class LanguageOverviewRepository:
         with self.db.get_connection() as conn:
             conn.execute(query, (value, language_id))
 
-    # Custom Section data retrive
     def get_custom_sections(self, language_id: str) -> List[Dict[str, Any]]:
         with self.db.get_connection() as conn:
             rows = conn.execute(

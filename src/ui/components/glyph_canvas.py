@@ -12,9 +12,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtSvg import QSvgRenderer
 
-
 class VectorStroke:
-    # A vector stroke with points, width, color, and smoothed painter path.
     def __init__(self, points: Optional[List[QPointF]] = None, width: float = 6.0, color: str = "#111111", is_eraser: bool = False):
         self.points: List[QPointF] = points or []
         self.width: float = width
@@ -31,7 +29,6 @@ class VectorStroke:
             path.addEllipse(pt, self.width / 2.0, self.width / 2.0)
             return path
 
-        # Quadratic Bézier curve smoothing for natural stroke character
         path.moveTo(self.points[0])
         for i in range(1, len(self.points) - 1):
             p0 = self.points[i]
@@ -39,12 +36,10 @@ class VectorStroke:
             mid = QPointF((p0.x() + p1.x()) / 2.0, (p0.y() + p1.y()) / 2.0)
             path.quadTo(p0, mid)
         
-        # Connect to final point
         path.lineTo(self.points[-1])
         return path
 
     def to_svg_path_data(self) -> str:
-        # Serialize smoothed Bézier points to SVG path 'd' attribute syntax.
         if not self.points:
             return ""
         if len(self.points) == 1:
@@ -80,9 +75,7 @@ class VectorStroke:
             is_eraser=data.get("is_eraser", False)
         )
 
-
 class GlyphCanvasWidget(QWidget):
-    # Interactive Vector Drawing Canvas with Bézier smoothing and guideline grids.
     content_changed = Signal()
 
     CANVAS_SIZE = 500  # Logical coordinate size (SVG viewBox reference)
@@ -93,13 +86,11 @@ class GlyphCanvasWidget(QWidget):
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-        # Drawing state
         self.strokes: List[VectorStroke] = []
         self.undo_stack: List[List[VectorStroke]] = []
         self.redo_stack: List[List[VectorStroke]] = []
         self.current_stroke: Optional[VectorStroke] = None
 
-        # Settings
         self.current_tool = "pen"  # "pen" or "eraser"
         self.pen_width = 6.0
         self.pen_color = "#111111"
@@ -108,7 +99,6 @@ class GlyphCanvasWidget(QWidget):
         self.setStyleSheet("background-color: #ffffff; border: 1px solid #dcdcdc; border-radius: 6px;")
 
     def _push_undo(self):
-        # Save deep copy of current strokes
         snapshot = [
             VectorStroke(points=[QPointF(p.x(), p.y()) for p in s.points], width=s.width, color=s.color, is_eraser=s.is_eraser)
             for s in self.strokes
@@ -151,8 +141,6 @@ class GlyphCanvasWidget(QWidget):
         self.update()
         self.content_changed.emit()
 
-    # MOUSE EVENTS
-
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             self._push_undo()
@@ -169,7 +157,6 @@ class GlyphCanvasWidget(QWidget):
     def mouseMoveEvent(self, event: QMouseEvent):
         if (event.buttons() & Qt.MouseButton.LeftButton) and self.current_stroke:
             pos = event.position()
-            # Only add point if moved slightly to avoid duplicate points
             last_p = self.current_stroke.points[-1]
             dx = pos.x() - last_p.x()
             dy = pos.y() - last_p.y()
@@ -183,21 +170,16 @@ class GlyphCanvasWidget(QWidget):
             self.update()
             self.content_changed.emit()
 
-    # PAINTING
-
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
-        # 1. Background
         painter.fillRect(self.rect(), QColor("#ffffff"))
 
-        # 2. External SVG backdrop if loaded
         if self.external_svg_renderer and self.external_svg_renderer.isValid():
             self.external_svg_renderer.render(painter, QRectF(0, 0, self.CANVAS_SIZE, self.CANVAS_SIZE))
 
-        # 3. User Strokes
         for stroke in self.strokes:
             path = stroke.build_path()
             if stroke.is_eraser:
@@ -208,10 +190,7 @@ class GlyphCanvasWidget(QWidget):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawPath(path)
 
-    # SVG EXPORT & IMPORT
-
     def to_svg(self) -> str:
-        # Export current drawing as standard standalone W3C SVG XML string with embedded stroke metadata.
         size = self.CANVAS_SIZE
         strokes_meta = json.dumps([s.to_dict() for s in self.strokes])
         
@@ -235,7 +214,6 @@ class GlyphCanvasWidget(QWidget):
         return "\n".join(svg_content)
 
     def load_svg(self, svg_str: str):
-        # Load drawing from SVG string. Restores vector stroke data if metadata exists.
         self.strokes.clear()
         self.undo_stack.clear()
         self.redo_stack.clear()
@@ -245,7 +223,6 @@ class GlyphCanvasWidget(QWidget):
             self.update()
             return
 
-        # Attempt to extract stroke metadata JSON
         try:
             root = ET.fromstring(svg_str)
             meta = root.find(".//{*}metadata")
@@ -260,7 +237,6 @@ class GlyphCanvasWidget(QWidget):
         except Exception as e:
             pass
 
-        # Fallback: load as external rendered SVG
         try:
             svg_bytes = svg_str.encode("utf-8")
             self.external_svg_renderer = QSvgRenderer(svg_bytes)
@@ -269,7 +245,6 @@ class GlyphCanvasWidget(QWidget):
             print(f"[GlyphCanvasWidget] Error rendering external SVG: {e}")
 
     def render_thumbnail(self, size: int = 100) -> QPixmap:
-        # Renders the current glyph canvas directly to a crisp QPixmap.
         pixmap = QPixmap(size, size)
         pixmap.fill(Qt.GlobalColor.white)
         
@@ -296,9 +271,7 @@ class GlyphCanvasWidget(QWidget):
         painter.end()
         return pixmap
 
-
 class CanvasStudioToolBar(QWidget):
-    # Controls toolbar for stroke width, eraser, undo/redo, and guideline grids.
     def __init__(self, canvas: GlyphCanvasWidget, parent=None):
         super().__init__(parent)
         self.canvas = canvas
@@ -307,7 +280,6 @@ class CanvasStudioToolBar(QWidget):
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(10)
 
-        # Pen / Eraser toggles
         self.btn_pen = QPushButton("✏️ Pen")
         self.btn_pen.setCheckable(True)
         self.btn_pen.setChecked(True)
@@ -324,7 +296,6 @@ class CanvasStudioToolBar(QWidget):
         layout.addWidget(self.btn_pen)
         layout.addWidget(self.btn_eraser)
 
-        # Stroke Width Selector
         layout.addSpacing(6)
         lbl_width = QLabel("Stroke:")
         lbl_width.setStyleSheet("font-size: 12px; color: #555555;")
@@ -341,10 +312,8 @@ class CanvasStudioToolBar(QWidget):
         layout.addWidget(self.slider_width)
         layout.addWidget(self.lbl_width_val)
 
-        # Grid Toggles
         layout.addSpacing(10)
 
-        # Undo / Redo
         self.btn_undo = QPushButton("↺ Undo")
         self.btn_undo.setToolTip("Undo stroke (Ctrl+Z)")
         self.btn_undo.clicked.connect(self.canvas.undo)

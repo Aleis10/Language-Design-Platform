@@ -16,13 +16,9 @@ except ImportError:
     from ..database.lexicon_db import LexiconRepository
     from ..components.glyph_audio import GlyphAudioWidget
 
-
-# Part-of-speech presets for quick tagging
 POS_OPTIONS = ["", "NOUN", "VERB", "ADJ", "ADV", "PRON", "PREP", "CONJ", "DET", "PART", "INTERJ", "NUM"]
 
-
 class _EntryDialog(QDialog):
-    """Add/Edit lexicon entry form with multiple audio variants, each with its own IPA."""
 
     def __init__(self, parent=None, data: Optional[dict] = None, base_audio_dir: str = "", data_dir: str = ""):
         super().__init__(parent)
@@ -32,8 +28,6 @@ class _EntryDialog(QDialog):
         self.available_audio = list(data.get("audio_variants", [])) if data else []
         self._is_edit = bool(data)
 
-        # If a conlang font is exported, the headword field uses it so PPUA
-        # glyph characters render as logograms (Latin still falls back).
         if data_dir:
             try:
                 from font_tools.font_registry import apply_conlang_font
@@ -53,7 +47,6 @@ class _EntryDialog(QDialog):
                 pass
         form.addRow("Headword:", self.input_headword)
 
-        # Primary IPA (still kept for the headword summary)
         self.input_ipa = QLineEdit()
         self.input_ipa.setPlaceholderText("e.g. /ka.ta.na/")
         form.addRow("Primary IPA:", self.input_ipa)
@@ -76,7 +69,6 @@ class _EntryDialog(QDialog):
         self.input_description.setFixedHeight(80)
         form.addRow("Description:", self.input_description)
 
-        # --- Audio variants: list + record-edit panel ---
         lbl_audio = QLabel("Pronunciation Audio Variants")
         lbl_audio.setStyleSheet("font-weight: bold;")
         form.addRow(lbl_audio)
@@ -88,7 +80,6 @@ class _EntryDialog(QDialog):
         form.addRow(self.audio_list)
 
         self.audio_widget = GlyphAudioWidget(base_audio_dir=base_audio_dir)
-        # Unique stem for fresh recordings (avoids overwriting existing clips)
         self.audio_widget.set_glyph(str(uuid.uuid4()))
         form.addRow("Record new / overwrite selected:", self.audio_widget)
 
@@ -123,7 +114,6 @@ class _EntryDialog(QDialog):
 
         self.input_ipa.clearFocus()
 
-        # Prefill
         if data:
             self.input_headword.setText(data.get("headword", ""))
             self.input_ipa.setText(data.get("ipa_reading", ""))
@@ -160,7 +150,6 @@ class _EntryDialog(QDialog):
         self.input_audio_ipa.setText(audio.get("ipa_reading", ""))
 
     def _add_variant(self):
-        # Capture whatever is currently in the recorder widget (fresh recording or reused)
         rel_path = self.audio_widget.current_audio_rel
         audio_data = {
             "id": None,  # new, will get an id on save
@@ -172,7 +161,6 @@ class _EntryDialog(QDialog):
         item = QListWidgetItem(tag or os.path.basename(rel_path or "(new recording)"))
         item.setData(Qt.ItemDataRole.UserRole, audio_data)
         self.audio_list.addItem(item)
-        # Reset recorder for next clip
         self.audio_widget.set_glyph(str(uuid.uuid4()))
         self.input_variant_label.clear()
         self.input_audio_ipa.clear()
@@ -183,7 +171,6 @@ class _EntryDialog(QDialog):
         if not audio:
             QMessageBox.information(self, "No selection", "Select an audio variant to update.")
             return
-        # Save the temp recording (if any) via the widget's current rel path
         rel_path = self.audio_widget.current_audio_rel or audio.get("audio_path", "")
         audio_data = {
             "id": audio.get("id"),
@@ -207,7 +194,6 @@ class _EntryDialog(QDialog):
         self._mark_changed()
 
     def _mark_changed(self):
-        # Track that variants were edited so Ok persists them
         if not hasattr(self, "_variants_dirty"):
             self._variants_dirty = True
 
@@ -238,7 +224,6 @@ class _EntryDialog(QDialog):
             "audio_variants": self._get_variants(),
         }
 
-
 class LexiconPage(QWidget):
     def __init__(self, lexicon_repo: LexiconRepository, language_id: str, session_dir: str = "", parent=None):
         super().__init__(parent)
@@ -246,7 +231,6 @@ class LexiconPage(QWidget):
         self.language_id = language_id
         self._current_query = ""
 
-        # Resolve data/audio root (session cache dir, else project-local data dir)
         self.session_dir = session_dir
         self.data_dir = session_dir or os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
@@ -270,14 +254,12 @@ class LexiconPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Top bar (white header bar, full width)
         top_bar = QWidget()
         top_bar.setObjectName("LexTopBar")
         top = QHBoxLayout(top_bar)
         top.setContentsMargins(20, 12, 20, 12)
         top.setSpacing(12)
 
-        # Title + add/edit/delete (left) + search (right)
         lbl = QLabel("Lexicon & Dictionary")
         lbl.setObjectName("LexTitle")
         top.addWidget(lbl)
@@ -305,7 +287,6 @@ class LexiconPage(QWidget):
         top.addWidget(self.search_input)
         root.addWidget(top_bar)
 
-        # Table (scrollable, shows all data)
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(20, 16, 20, 16)
@@ -322,11 +303,9 @@ class LexiconPage(QWidget):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.setColumnHidden(7, True)   # hide ID
-        # Description shown full (column 6) — wrap for readability
         self.table.setWordWrap(True)
         body_layout.addWidget(self.table, stretch=1)
 
-        # Entry count footer
         self.lbl_count = QLabel("0 entries")
         self.lbl_count.setObjectName("LexCount")
         body_layout.addWidget(self.lbl_count)
@@ -342,7 +321,6 @@ class LexiconPage(QWidget):
         verbs = 0
         for row, entry in enumerate(entries):
             hw_item = QTableWidgetItem(entry.get("headword", ""))
-            # Conlang font renders PPUA glyph chars; Latin falls back automatically
             if hasattr(self, "data_dir") and self.data_dir:
                 try:
                     from font_tools.font_registry import conlang_font
@@ -355,7 +333,6 @@ class LexiconPage(QWidget):
             self.table.setItem(row, 3, QTableWidgetItem(entry.get("meaning", "")))
             self.table.setItem(row, 4, QTableWidgetItem(entry.get("english_translation", "")))
 
-            # Audio variants summary: "2 · /ka.ta/ · /ka.ta.waa/"
             variants = entry.get("audio_variants", [])
             variant_text = f"{len(variants)} recording(s)"
             if variants:
@@ -403,7 +380,6 @@ class LexiconPage(QWidget):
                 english_translation=data.get("english_translation", ""),
                 description=data.get("description", ""),
             )
-            # Persist any recorded audio variants
             for variant in data.get("audio_variants", []):
                 if variant.get("audio_path"):
                     self.lexicon_repo.add_entry_audio(
@@ -422,7 +398,6 @@ class LexiconPage(QWidget):
         dlg = _EntryDialog(self, data=entry, base_audio_dir=self.audio_dir, data_dir=self.data_dir)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             data = dlg.get_data()
-            # Update core fields
             self.lexicon_repo.update_entry(
                 entry["id"],
                 headword=data["headword"],
@@ -432,13 +407,11 @@ class LexiconPage(QWidget):
                 english_translation=data.get("english_translation", ""),
                 description=data.get("description", ""),
             )
-            # Reconcile audio variants: delete removed, add new, update changed
             existing = {v["id"]: v for v in entry.get("audio_variants", []) if v.get("id")}
             kept_ids = set()
             for variant in data.get("audio_variants", []):
                 vid = variant.get("id")
                 if vid and vid in existing:
-                    # Update if changed
                     self.lexicon_repo.update_entry_audio(
                         vid,
                         variant_label=variant.get("variant_label", ""),
@@ -447,14 +420,12 @@ class LexiconPage(QWidget):
                     )
                     kept_ids.add(vid)
                 else:
-                    # Newly added variant
                     self.lexicon_repo.add_entry_audio(
                         entry["id"],
                         audio_path=variant.get("audio_path", ""),
                         ipa_reading=variant.get("ipa_reading", ""),
                         variant_label=variant.get("variant_label", ""),
                     )
-            # Delete any audio that was removed from the list
             for vid in existing:
                 if vid not in kept_ids:
                     self.lexicon_repo.delete_entry_audio(vid)

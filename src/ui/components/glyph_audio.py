@@ -8,9 +8,7 @@ from PySide6.QtMultimedia import (
     QAudioOutput, QMediaPlayer, QMediaFormat
 )
 
-
 class GlyphAudioWidget(QWidget):
-    # Audio recorder and playback controller for glyphs & vocabulary entries.
     audio_changed = Signal(str)  # Emits relative or absolute path to audio file
 
     def __init__(self, base_audio_dir: str = "", audio_path: str = "", parent=None):
@@ -25,12 +23,10 @@ class GlyphAudioWidget(QWidget):
         self.is_recording = False
         self.glyph_id = None
 
-        # Audio Session & Recorder
         self.capture_session = None
         self.audio_input = None
         self.recorder = None
 
-        # Audio Player
         self.player = None
         self.audio_output = None
 
@@ -40,20 +36,17 @@ class GlyphAudioWidget(QWidget):
 
     def _init_multimedia(self):
         try:
-            # Playback
             self.player = QMediaPlayer(self)
             self.audio_output = QAudioOutput(self)
             self.player.setAudioOutput(self.audio_output)
             self.player.playbackStateChanged.connect(self._on_playback_state_changed)
 
-            # Recording
             self.capture_session = QMediaCaptureSession(self)
             self.audio_input = QAudioInput(self)
             self.capture_session.setAudioInput(self.audio_input)
             self.recorder = QMediaRecorder(self)
             self.capture_session.setRecorder(self.recorder)
 
-            # Set format to WAV
             fmt = QMediaFormat()
             fmt.setFileFormat(QMediaFormat.FileFormat.Wave)
             fmt.setAudioCodec(QMediaFormat.AudioCodec.Wave)
@@ -70,7 +63,6 @@ class GlyphAudioWidget(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        # Record Button
         self.btn_record = QPushButton("⏺ Record Audio")
         self.btn_record.setObjectName("BtnRecordAudio")
         self.btn_record.setStyleSheet("""
@@ -86,7 +78,6 @@ class GlyphAudioWidget(QWidget):
         """)
         self.btn_record.clicked.connect(self.toggle_record)
 
-        # Play Button
         self.btn_play = QPushButton("▶ Play")
         self.btn_play.setObjectName("BtnPlayAudio")
         self.btn_play.setStyleSheet("""
@@ -103,7 +94,6 @@ class GlyphAudioWidget(QWidget):
         """)
         self.btn_play.clicked.connect(self.play_audio)
 
-        # Delete Button
         self.btn_delete = QPushButton("🗑 Clear")
         self.btn_delete.setObjectName("BtnDeleteAudio")
         self.btn_delete.setStyleSheet("""
@@ -172,7 +162,6 @@ class GlyphAudioWidget(QWidget):
             return
 
         if not self.is_recording:
-            # Start recording
             glyph_name = self.glyph_id or "clip"
             target_filename = f"{glyph_name}.wav"
             target_abs = os.path.join(self.base_audio_dir, target_filename)
@@ -186,7 +175,6 @@ class GlyphAudioWidget(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Recording Failed", f"Could not start audio recorder:\n{e}")
         else:
-            # Stop recording
             try:
                 self.recorder.stop()
             except Exception as e:

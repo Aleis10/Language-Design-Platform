@@ -1,14 +1,3 @@
-"""
-On-screen digital keyboard (OSK) — a compact floating panel that types the
-assigned character for each key into whichever text field currently has focus.
-
-Sources:
-  keyboard_repo.all_mappings_for_language(language_id)   -> key_code -> char
-  font_registry.glyph_character(session_dir, glyph_id)   -> PPUA char
-
-It uses the same row/col grid as the Keyboard Layout Mapper page (including
-the wide space-row), so the on-screen layout mirrors what the user designed.
-"""
 
 import os
 from PySide6.QtWidgets import (
@@ -25,7 +14,6 @@ except (ImportError, ValueError):
     from ..database.keyboard_db import KeyboardRepository
     from ...font_tools.font_registry import glyph_character, conlang_font
 
-# Mirrored from keyboard_page.QWERTY_ROWS — physical layout grid.
 QWERTY_ROWS = [
     ["`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="],
     ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"],
@@ -33,14 +21,11 @@ QWERTY_ROWS = [
     ["z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "Tab"],
     ["Space"],
 ]
-# key_code -> (display text, span, objectName behaviour)
 FILTER_KEYS = {"BS": ("⌫ Backspace", 2, "Backspace"), "Tab": ("⇥ Tab", 2, "Tab"), "Space": ("Space", 8, "Space")}
 
 KEY_CODES = {k for row in QWERTY_ROWS for k in row}
 
-
 def _render_glyph_icon(svg_data: str, size: int = 24):
-    """Render an SVG glyph string into a QIcon for use on key buttons."""
     if not svg_data or not svg_data.strip():
         return None
     try:
@@ -58,9 +43,7 @@ def _render_glyph_icon(svg_data: str, size: int = 24):
     except Exception:
         return None
 
-
 class OnScreenKeyboard(QWidget):
-    """Compact floating keyboard; types into QApplication.focusWidget()."""
 
     closed = Signal()
     conlang_toggle_requested = Signal()
@@ -78,11 +61,7 @@ class OnScreenKeyboard(QWidget):
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
         self.setWindowTitle("Digital Keyboard")
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        # Show without taking window activation — the user's text field must
-        # keep focus while the keyboard floats above it (virtual-keyboard rule).
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-        # Never steal focus from the user's text field — OSK buttons must be
-        # clickable while focusWidget() stays on the target editor.
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self._build_ui()
@@ -135,7 +114,6 @@ class OnScreenKeyboard(QWidget):
                 btn = QPushButton(display)
                 btn.setObjectName(obj_name)
                 btn.setMinimumHeight(34)
-                # NoFocus: clicking must not move focus off the text field
                 btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
                 if obj_name == "Backspace":
                     btn.setToolTip("Backspace")
@@ -210,8 +188,6 @@ class OnScreenKeyboard(QWidget):
         }
         """
 
-    # ---- data ----
-
     def reload_mappings(self):
         self._mappings = {}
         try:
@@ -240,7 +216,6 @@ class OnScreenKeyboard(QWidget):
                 continue
             m = self._mappings.get(key)
             if m and (m["char"] or m["glyph_id"]):
-                # show glyph icon if assigned to one, else the char
                 if m["glyph_id"] and self.session_dir:
                     svg = ""
                     try:
@@ -274,8 +249,6 @@ class OnScreenKeyboard(QWidget):
                 btn.setFont(QFont())
                 btn.setToolTip("")
 
-    # ---- input ----
-
     def _on_key(self):
         btn = self.sender()
         if not btn:
@@ -296,16 +269,11 @@ class OnScreenKeyboard(QWidget):
         if m and m["char"]:
             self._insert(m["char"])
         elif m and m["glyph_id"]:
-            # glyph without font export — fall back to PPUA text if provided
             self._insert(m.get("ppua") or "")
 
     def _insert(self, text: str):
-        # The OSK window never takes activation (WA_ShowWithoutActivating), so
-        # focusWidget() is the user's field. In offscreen tests the platform
-        # may not honor that — fall back to the main window's focus if needed.
         w = self._focus_widget()
         if not w:
-            # Last resort: the main window's active subwidget
             win = self.window() if self.window() != self else None
             if win is not None:
                 try:
@@ -314,7 +282,6 @@ class OnScreenKeyboard(QWidget):
                     w = None
         if not w:
             return
-        # QLineEdit/QTextEdit/QPlainTextEdit all expose insert(str)
         ins = getattr(w, "insert", None)
         if callable(ins):
             try:
@@ -322,7 +289,6 @@ class OnScreenKeyboard(QWidget):
                 return
             except Exception:
                 pass
-        # Fallback widgets without insert(): append via setText if available
         setter = getattr(w, "setText", None)
         getter = getattr(w, "text", None)
         if callable(setter) and callable(getter):
@@ -331,7 +297,6 @@ class OnScreenKeyboard(QWidget):
                 return
             except Exception:
                 pass
-        # Last resort: simulate keystrokes for ASCII, skip glyphs
         for ch in text:
             if ch.isascii():
                 try:
@@ -363,11 +328,7 @@ class OnScreenKeyboard(QWidget):
         except Exception:
             pass
 
-    # ---- Conlang mode mirroring ----
-
     def set_conlang_mode(self, on: bool):
-        """Called when Conlang mode toggles. Keeps an indicator state so pressed
-        physical keys highlight the corresponding key."""
         self._conlang_mode = on
         if hasattr(self, "btn_conlang"):
             self.btn_conlang.setChecked(on)
@@ -378,16 +339,13 @@ class OnScreenKeyboard(QWidget):
             )
         if not on:
             self.clear_highlight()
-        # a subtle border change so the user knows mode is on
         for btn in self._key_buttons.values():
             self._repaint_key(btn)
 
     def _on_conlang_clicked(self):
-        """User clicked the toggle inside the OSK — ask MainWindow to flip mode."""
         self.conlang_toggle_requested.emit()
 
     def highlight_key(self, key_code: str):
-        """Highlight the key that was physically pressed (mirror)."""
         btn = self._key_buttons.get(key_code)
         if btn is not None:
             self._highlight_btn(btn)
@@ -413,12 +371,10 @@ class OnScreenKeyboard(QWidget):
         self._repaint_key(btn)
 
     def _repaint_key(self, btn):
-        """Repaint a key to its normal (mapped/unmapped) style."""
         try:
             key = next((k for k, b in self._key_buttons.items() if b is btn), None)
             if key is None:
                 return
-            # simulate what _paint_keys does for this key
             m = self._mappings.get(key)
             if m and (m.get("char") or m.get("glyph_id")):
                 self._paint_key_btn(btn, key, m)
@@ -429,7 +385,6 @@ class OnScreenKeyboard(QWidget):
             pass
 
     def _paint_key_btn(self, btn, key, m):
-        """Reconstruct a single keycap appearance from its mapping."""
         if m.get("glyph_id") and self.session_dir:
             svg = ""
             try:
