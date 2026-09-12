@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Mapping
 
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QPainterPath, QPainterPathStroker
@@ -71,6 +71,40 @@ def qpainterpath_to_contours(
         contours.append(current)
     return contours
 
+def _flip_y(path: QPainterPath, canvas_size: float, scale: float) -> QPainterPath:
+    out = QPainterPath()
+    count = path.elementCount()
+    if count == 0:
+        return out
+    first = path.elementAt(0)
+    mx = first.x * scale
+    my = (canvas_size - first.y) * scale
+    out.moveTo(mx, my)
+    i = 1
+    while i < count:
+        el = path.elementAt(i)
+        if el.type == QPainterPath.ElementType.LineToElement:
+            out.lineTo(el.x * scale, (canvas_size - el.y) * scale)
+            i += 1
+        elif el.type == QPainterPath.ElementType.CurveToElement:
+            if i + 2 < count:
+                e2 = path.elementAt(i + 1)
+                e3 = path.elementAt(i + 2)
+                out.cubicTo(
+                    el.x * scale, (canvas_size - el.y) * scale,
+                    e2.x * scale, (canvas_size - e2.y) * scale,
+                    e3.x * scale, (canvas_size - e3.y) * scale,
+                )
+                i += 3
+            else:
+                i += 1
+        elif el.type == QPainterPath.ElementType.MoveToElement:
+            out.moveTo(el.x * scale, (canvas_size - el.y) * scale)
+            i += 1
+        else:
+            i += 1
+    return out
+
 def _sx(x: float, scale: float) -> float:
     return float(x) * scale
 
@@ -91,6 +125,12 @@ def _feed_contour_to_pen(
         elif kind == "cubic":
             pen.curveTo(c1, c2, end)
     pen.closePath()
+
+class FilledContour:
+    """Wrapper marking a pre-filled QPainterPath as a direct glyph contour."""
+
+    def __init__(self, path: QPainterPath):
+        self.path = path
 
 def strokes_to_ttf(
     glyphs: Dict[str, Sequence[Tuple[QPainterPath, float]]],
@@ -113,10 +153,20 @@ def strokes_to_ttf(
         pen = TTGlyphPen(None)
         qupen = Cu2QuPen(pen, max_err=1.0, all_quadratic=True)
         for spath, swidth in strokes:
+            if isinstance(spath, FilledContour):
+                # pre-filled contour (external path SVG): use path directly
+                flipped = _flip_y(spath.path, 500.0, scale)
+                for contour in qpainterpath_to_contours(flipped, 1.0):
+                    if len(contour) < 2:
+                        continue
+                    _feed_contour_to_pen(qupen, contour)
+                continue
             closed = stroke_to_closed_path(spath, swidth)
             if closed.isEmpty():
                 continue
-            for contour in qpainterpath_to_contours(closed, scale):
+            # canvas is Y-down; fonts are Y-up — flip so the glyph isn't rotated 180
+            flipped = _flip_y(closed, 500.0, scale)
+            for contour in qpainterpath_to_contours(flipped, 1.0):
                 if len(contour) < 2:
                     continue
                 _feed_contour_to_pen(qupen, contour)
@@ -182,7 +232,14 @@ def strokes_to_ttf(
     return {gname: cp for cp, gname in cmapping.items()}
 
 def _sanitize_glyph_name(name: str) -> str:
-    out = [ch if (ch.isalnum() or ch in "._") else "_" for ch in name]
+    out = []
+    for ch in name:
+        if ch.isalnum() and ord(ch) < 128:
+            out.append(ch)
+        elif ch in "._":
+            out.append(ch)
+        else:
+            out.append(f"uni{ord(ch):04X}")
     s = "".join(out)
     if not s:
         s = "glyph"
@@ -191,14 +248,18 @@ def _sanitize_glyph_name(name: str) -> str:
     return s[:63]
 
 def build_font_from_strokes(
-    strokes_by_glyph: Dict[str, Sequence[object]],
+    strokes_by_glyph: Mapping[str, Sequence[object]],
     output_path: str,
     family: str = FONT_FAMILY,
 ) -> Dict[str, int]:
-    glyphs: Dict[str, List[Tuple[QPainterPath, float]]] = {}
+    glyphs: Dict[str, List[Tuple[object, float]]] = {}
     for gname, strokes in strokes_by_glyph.items():
-        entry: List[Tuple[QPainterPath, float]] = []
+        entry: List[Tuple[object, float]] = []
         for s in strokes:
+            if isinstance(s, FilledContour):
+                # pre-filled contour (external path SVG): mark width -1
+                entry.append((s, -1.0))
+                continue
             if getattr(s, "is_eraser", False):
                 continue
             entry.append((s.build_path(), s.width))

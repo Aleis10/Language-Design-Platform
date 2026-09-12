@@ -1,9 +1,10 @@
 import os
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QFileDialog, QMessageBox, QStackedWidget, QWidget
+    QPushButton, QMessageBox, QStackedWidget, QWidget
 )
 from PySide6.QtCore import Qt
+from ui.components.dark_file_dialog import open_dark_dialog
 
 class ProjectHub(QDialog):
     def __init__(self, parent=None):
@@ -111,13 +112,15 @@ class ProjectHub(QDialog):
             suggested_name = self.input_name.text().strip().lower().replace(" ", "_") or "untitled_language"
             default_file = f"{suggested_name}.langarc"
 
-            dialog = QFileDialog(self, "Select Project Archive Location", default_file,
-                "Language Archive (*.langarc);;Zip Archive (*.zip);;SQLite Database (*.db)")
-            dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-            if dialog.exec() == QFileDialog.DialogCode.Accepted:
-                file_path = dialog.selectedFiles()[0]
-                if file_path:
-                    self.input_path.setText(file_path)
+            file_path = open_dark_dialog(
+                self,
+                "Select Project Archive Location",
+                default_file,
+                "Language Archive (*.langarc);;Zip Archive (*.zip);;SQLite Database (*.db)",
+                save_mode=True,
+            )
+            if file_path:
+                self.input_path.setText(file_path)
 
     def _handle_create_project(self):
         name = self.input_name.text().strip()
@@ -136,17 +139,18 @@ class ProjectHub(QDialog):
         self.accept()
 
     def _handle_open_existing(self):
-        dialog = QFileDialog(self, "Open Language Project Archive", "",
-            "Language Archive (*.langarc *.zip);;SQLite Database (*.db);;All Files (*)")
-        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-        if dialog.exec() != QFileDialog.DialogCode.Accepted:
+        file_path = open_dark_dialog(
+            self,
+            "Open Language Project Archive",
+            "",
+            "Language Archive (*.langarc *.zip);;SQLite Database (*.db);;All Files (*)",
+        )
+        if not file_path:
             return
-        file_path = dialog.selectedFiles()[0]
-        if file_path:
-            self.selected_db_path = file_path
-            self.project_name = os.path.splitext(os.path.basename(file_path))[0].replace("_", " ").title()
-            self.is_new_project = False
-            self.accept()
+        self.selected_db_path = file_path
+        self.project_name = os.path.splitext(os.path.basename(file_path))[0].replace("_", " ").title()
+        self.is_new_project = False
+        self.accept()
 
 def run_project_hub():
     dialog = ProjectHub()

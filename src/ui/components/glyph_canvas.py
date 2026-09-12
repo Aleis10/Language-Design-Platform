@@ -246,7 +246,7 @@ class GlyphCanvasWidget(QWidget):
 
     def render_thumbnail(self, size: int = 100) -> QPixmap:
         pixmap = QPixmap(size, size)
-        pixmap.fill(Qt.GlobalColor.white)
+        pixmap.fill(Qt.GlobalColor.transparent)
         
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)

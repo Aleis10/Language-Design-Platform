@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QAction, QKeySequence, QFont, QShortcut, QKeyEvent
 from PySide6.QtCore import Qt, QEvent, QObject, Signal, QTimer
 from .components.coll_sidebar import Sidebar
+from .components.dark_file_dialog import open_dark_dialog
 from .components.floating_keyboard import FloatingKeyboardButton
 from .components.on_screen_keyboard import OnScreenKeyboard
 from .pages.overview import Overview_Page
@@ -217,8 +218,16 @@ class MainWindow(QMainWindow):
         if self.osk is not None:
             self._close_osk()
             return
-        if not self.keyboard_repo or not self.language_id:
-            self.kbd_button.setChecked(False)
+        # never silently fail — show why if we can't open
+        if not self.keyboard_repo:
+            self.statusBar().showMessage("Keyboard repo missing; cannot open OSK", 3000)
+            if self.kbd_button:
+                self.kbd_button.setChecked(False)
+            return
+        if not self.language_id:
+            self.statusBar().showMessage("No language loaded; cannot open OSK", 3000)
+            if self.kbd_button:
+                self.kbd_button.setChecked(False)
             return
         self.osk = OnScreenKeyboard(
             keyboard_repo=self.keyboard_repo,
@@ -407,10 +416,14 @@ class MainWindow(QMainWindow):
     def action_save_as(self):
         clean_name = self.project_name.lower().replace(" ", "_") if self.project_name else "language"
         default_file = f"{clean_name}.langarc"
-        dialog = QFileDialog(self, "Save Copy As", default_file, "Language Archive (*.langarc);;Zip Archive (*.zip);;All Files (*)")
-        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-        if dialog.exec() == QFileDialog.DialogCode.Accepted:
-            new_path = dialog.selectedFiles()[0]
+        new_path = open_dark_dialog(
+            self,
+            "Save Copy As",
+            default_file,
+            "Language Archive (*.langarc);;Zip Archive (*.zip);;All Files (*)",
+            save_mode=True,
+        )
+        if new_path:
             try:
                 self.archive_manager.save_archive(
                     self.session_dir, new_path, self.project_name
@@ -441,12 +454,12 @@ class MainWindow(QMainWindow):
                     self._reload_project(*hub_result)
 
     def action_open_project(self):
-        dialog = QFileDialog(self, "Open Language Archive", "",
-            "Language Archive (*.langarc *.zip);;SQLite Database (*.db);;All Files (*)")
-        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-        if dialog.exec() != QFileDialog.DialogCode.Accepted:
-            return
-        file_path = dialog.selectedFiles()[0]
+        file_path = open_dark_dialog(
+            self,
+            "Open Language Archive",
+            "",
+            "Language Archive (*.langarc *.zip);;SQLite Database (*.db);;All Files (*)",
+        )
         if not file_path:
             return
 

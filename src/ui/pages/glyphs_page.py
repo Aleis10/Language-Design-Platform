@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QScrollArea, QFrame, QStackedWidget, QDialog,
-    QFormLayout, QMessageBox, QFileDialog, QListWidget, QListWidgetItem,
+    QFormLayout, QMessageBox, QListWidget, QListWidgetItem,
     QSizePolicy, QGridLayout
 )
 from PySide6.QtCore import Qt, QSize
@@ -16,12 +16,14 @@ try:
     from ui.components.glyph_canvas import GlyphCanvasWidget, CanvasStudioToolBar
     from ui.components.glyph_audio import GlyphAudioWidget
     from ui.components.ipa_picker import IPAPickerDialog
+    from ui.components.dark_file_dialog import open_dark_dialog
     from font_tools.font_registry import get_fonts_dir, register_language_font
 except (ImportError, ValueError):
     from ...database.glyph_db import GlyphRepository
     from ..components.glyph_canvas import GlyphCanvasWidget, CanvasStudioToolBar
     from ..components.glyph_audio import GlyphAudioWidget
     from ..components.ipa_picker import IPAPickerDialog
+    from ..components.dark_file_dialog import open_dark_dialog
     from ...font_tools.font_registry import get_fonts_dir, register_language_font
 
 def get_base_data_dir() -> str:
@@ -500,12 +502,10 @@ class Glyphs_Page(QWidget):
         picker.exec()
 
     def _import_external_svg(self):
-            dialog = QFileDialog(self, "Import Symbol / Glyph", "", "Vector Graphics (*.svg)")
-            dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-            if dialog.exec() != QFileDialog.DialogCode.Accepted:
-                return
-            path = dialog.selectedFiles()[0]
-            if path and os.path.exists(path):
+        path = open_dark_dialog(
+            self, "Import Symbol / Glyph", "", "Vector Graphics (*.svg)"
+        )
+        if path and os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
                     content = f.read()
                 self.canvas.load_svg(content)
@@ -556,11 +556,9 @@ class Glyphs_Page(QWidget):
         svg_data = self.canvas.to_svg()
         name = self.input_glyph_name.text().strip() or "glyph"
         clean = re.sub(r'[^a-zA-Z0-9_\-]', '_', name.lower())
-        dialog = QFileDialog(self, "Export Standalone SVG", f"{clean}.svg", "SVG (*.svg)")
-        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-        if dialog.exec() != QFileDialog.DialogCode.Accepted:
-            return
-        path = dialog.selectedFiles()[0]
+        path = open_dark_dialog(
+            self, "Export Standalone SVG", f"{clean}.svg", "SVG (*.svg)", save_mode=True
+        )
         if path:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(svg_data)
