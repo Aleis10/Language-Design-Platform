@@ -14,7 +14,7 @@ class FontExportResult:
     mapping_path: str
     family_name: str
     num_glyphs: int
-    mapping: Dict[str, int]  # glyph_id -> codepoint
+    mapping: Dict[str, int]  
 
 def _extract_strokes(svg_str: str) -> List[VectorStroke]:
     if not svg_str:

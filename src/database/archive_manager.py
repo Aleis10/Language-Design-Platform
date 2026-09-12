@@ -43,7 +43,7 @@ class ProjectArchiveManager:
 
         session_dir = cls.get_session_dir_for_archive(langarc_path)
         
- # Clean out any old session debris if starting a fresh project with same name
+        # Clean out any old session debris if starting a fresh project with same name
         for item in os.listdir(session_dir):
             item_path = os.path.join(session_dir, item)
             if os.path.isdir(item_path):

@@ -81,41 +81,6 @@ class _ConlangFontFilter(QObject):
         except Exception:
             pass
 
-class _ConlangModeController(QObject):
-
-    mode_changed = Signal(bool)
-    key_pressed = Signal(str)  
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._active = False
-        self.key_to_glyph: Dict[str, Dict] = {} 
-
-    @property
-    def active(self) -> bool:
-        return self._active
-
-    def set_active(self, on: bool):
-        if on != self._active:
-            self._active = on
-            self.mode_changed.emit(on)
-
-    def set_mappings(self, mappings: Dict[str, Dict]):
-        self.key_to_glyph = mappings
-
-    def glyph_for_key(self, key_code: str) -> Optional[str]:
-
-        m = self.key_to_glyph.get(key_code)
-        if not m:
-            return None
-        char = m.get("char")
-        if char:
-            return char
-        ppua = m.get("ppua") or ""
-        if ppua and not ppua.startswith("U+"):
-            return ppua
-        return None
-
 class MainWindow(QMainWindow):
     def __init__(
         self,
@@ -206,7 +171,6 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(central_widget)
 
- # digital-keyboard 
         self.osk = None
         self.kbd_button = FloatingKeyboardButton()
         self.kbd_button.toggled_on.connect(self._toggle_osk)
@@ -218,21 +182,16 @@ class MainWindow(QMainWindow):
             app_instance.installEventFilter(self.conlang_font_filter)
         self.conlang_font_filter.refresh_family()
 
-        self.conlang_mode = _ConlangModeController(parent=self)
-        self.conlang_mode.mode_changed.connect(self._on_conlang_mode_changed)
         app_instance = QApplication.instance()
         if app_instance is not None:
             app_instance.installEventFilter(self)
         self._reload_conlang_mappings()
-        self._setup_conlang_hotkey()
-        self._setup_conlang_indicator()
+        self._setup_osk_hotkey()
 
     def _update_window_title(self):
         title_suffix = f" - {self.project_name}" if self.project_name else ""
         arc_suffix = f" [{os.path.basename(self.archive_path)}]" if self.archive_path else ""
         self.setWindowTitle(f"Lexicography & Language Software{title_suffix}{arc_suffix}")
-
- # Digital keyboard 
 
     def _install_floating_kbd(self):
         try:
@@ -268,9 +227,6 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self.osk.closed.connect(self._on_osk_closed)
-        self.conlang_mode.key_pressed.connect(self.osk.highlight_key)
-        self.osk.conlang_toggle_requested.connect(self.toggle_conlang_mode)
-        self.osk.set_conlang_mode(self.conlang_mode.active)
         self.osk.show()
         self._position_osk()
 
@@ -297,51 +253,19 @@ class MainWindow(QMainWindow):
         if self.kbd_button:
             self.kbd_button.setChecked(False)
 
-    def _setup_conlang_hotkey(self):
- # Ctrl+Shift+Space toggles 
+    def _setup_osk_hotkey(self):
         try:
-            self._conlang_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Space"), self)
-            self._conlang_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
-            self._conlang_shortcut.activated.connect(self.toggle_conlang_mode)
+            self._osk_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Space"), self)
+            self._osk_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            self._osk_shortcut.activated.connect(self._toggle_osk)
+            self._osk_action = QAction("Toggle Digital Keyboard", self)
+            self._osk_action.setShortcut(QKeySequence("Ctrl+Shift+Space"))
+            self._osk_action.triggered.connect(self._toggle_osk)
+            self._osk_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+            self.addAction(self._osk_action)
         except Exception:
-            self._conlang_shortcut = None
-
-    def _setup_conlang_indicator(self):
-        try:
-            self.conlang_indicator = QLabel("CONLANG: OFF")
-            self.conlang_indicator.setToolTip("Conlang mode — press Ctrl+Shift+Space to toggle")
-            self.statusBar().addPermanentWidget(self.conlang_indicator)
-            self._style_conlang_indicator(False)
-        except Exception:
-            self.conlang_indicator = None
-
-    def _style_conlang_indicator(self, on: bool):
-        if not getattr(self, "conlang_indicator", None):
-            return
-        if on:
-            self.conlang_indicator.setText("CONLANG: ON")
-            self.conlang_indicator.setStyleSheet(
-                "background:#007acc; color:white; padding:2px 10px; border-radius:9px; font-weight:bold;"
-            )
-        else:
-            self.conlang_indicator.setText("CONLANG: OFF")
-            self.conlang_indicator.setStyleSheet(
-                "background:#e0e0e0; color:#666; padding:2px 10px; border-radius:9px;"
-            )
-
-    def toggle_conlang_mode(self):
-        self.conlang_mode.set_active(not self.conlang_mode.active)
-
-    def _on_conlang_mode_changed(self, on: bool):
-        self._style_conlang_indicator(on)
-        if self.osk is not None and hasattr(self.osk, "set_conlang_mode"):
-            self.osk.set_conlang_mode(on)
-        try:
-            self.statusBar().showMessage(
-                f"Conlang mode {'ON — physical keys type glyphs' if on else 'OFF — normal typing'}", 3000
-            )
-        except Exception:
-            pass
+            self._osk_shortcut = None
+            self._osk_action = None
 
     def _reload_conlang_mappings(self):
         mappings: Dict[str, Dict] = {}
@@ -360,16 +284,35 @@ class MainWindow(QMainWindow):
                     mappings[key_code] = {"char": char, "glyph_id": m.get("glyph_id"), "ppua": m.get("ppua") or ""}
             except Exception:
                 mappings = {}
-        self.conlang_mode.set_mappings(mappings)
+        self._glyph_mappings = mappings
+
+    def _glyph_for_key(self, key_code: str) -> Optional[str]:
+        m = self._glyph_mappings.get(key_code)
+        if not m:
+            return None
+        char = m.get("char")
+        if char:
+            return char
+        ppua = m.get("ppua") or ""
+        if ppua and not ppua.startswith("U+"):
+            return ppua
+        return None
 
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.KeyPress and self.conlang_mode.active \
+        if event.type() == QEvent.Type.KeyPress and not event.isAutoRepeat():
+            mods = event.modifiers()
+            if event.key() == Qt.Key.Key_Space and mods & Qt.KeyboardModifier.ControlModifier \
+                    and mods & Qt.KeyboardModifier.ShiftModifier:
+                self._toggle_osk()
+                return True
+        if event.type() == QEvent.Type.KeyPress and self.osk is not None \
                 and not event.isAutoRepeat():
             key_code = self._qkey_to_key_code(event)
             if key_code:
-                glyph = self.conlang_mode.glyph_for_key(key_code)
+                glyph = self._glyph_for_key(key_code)
                 if glyph:
-                    self.conlang_mode.key_pressed.emit(key_code)
+                    if self.osk is not None:
+                        self.osk.highlight_key(key_code)
                     self._insert_into_focus(glyph)
                     return True  # swallow the original key
         return super().eventFilter(obj, event)

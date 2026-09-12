@@ -336,7 +336,6 @@ class Custom_Card(QFrame):
         header_layout.addWidget(self.btn_delete)
         self.main_layout.addLayout(header_layout)
 
- # Content Body 
         self.content_widget = QWidget()
         content_layout = QVBoxLayout(self.content_widget)
         content_layout.setContentsMargins(0, 6, 0, 0)

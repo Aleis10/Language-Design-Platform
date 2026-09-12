@@ -47,11 +47,11 @@ class KeyboardRepository:
                 ON keyboard_mappings(preset_id, key_code);
             """)
 
- # Migration: older schema used language_id directly (no presets). Move rows into a default preset.
+            # Migration: older schema used language_id directly (no presets). Move rows into a default preset.
             cursor.execute("PRAGMA table_info(keyboard_mappings);")
             cols = {row["name"] for row in cursor.fetchall()}
             if "preset_id" not in cols:
- # Legacy table: rename/rebuild. Simplify — add col and backfill.
+                # Legacy table: rename/rebuild. Simplify — add col and backfill.
                 cursor.execute("ALTER TABLE keyboard_mappings ADD COLUMN preset_id TEXT;")
                 cursor.execute("PRAGMA table_info(keyboard_mappings);")
                 cols = {row["name"] for row in cursor.fetchall()}

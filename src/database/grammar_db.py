@@ -79,7 +79,7 @@ class GrammarRepository:
                 ON grammar_rules(language_id, position);
             """)
 
- # Migration: add missing columns for existing projects
+            # Migration: add missing columns for existing projects
             cursor.execute("PRAGMA table_info(grammar_rules);")
             existing_cols = {row["name"] for row in cursor.fetchall()}
             migrations = {

@@ -46,7 +46,6 @@ def _render_glyph_icon(svg_data: str, size: int = 24):
 class OnScreenKeyboard(QWidget):
 
     closed = Signal()
-    conlang_toggle_requested = Signal()
 
     def __init__(self, keyboard_repo, language_id: str, session_dir: str = "", parent=None):
         super().__init__(parent)
@@ -56,7 +55,6 @@ class OnScreenKeyboard(QWidget):
         self._key_buttons = {}
         self._mappings = {}
         self._conlang_family = None
-        self._conlang_mode = False
 
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
         self.setWindowTitle("Digital Keyboard")
@@ -83,12 +81,6 @@ class OnScreenKeyboard(QWidget):
         lbl.setObjectName("OSKTitle")
         header.addWidget(lbl)
         header.addStretch()
-        self.btn_conlang = QPushButton("CONLANG: OFF")
-        self.btn_conlang.setObjectName("OSKConlangToggle")
-        self.btn_conlang.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_conlang.setCheckable(True)
-        self.btn_conlang.clicked.connect(self._on_conlang_clicked)
-        header.addWidget(self.btn_conlang)
         btn_close = QToolButton()
         btn_close.setText("✕")
         btn_close.setObjectName("OSKClose")
@@ -327,23 +319,6 @@ class OnScreenKeyboard(QWidget):
             QApplication.sendEvent(w, release)
         except Exception:
             pass
-
-    def set_conlang_mode(self, on: bool):
-        self._conlang_mode = on
-        if hasattr(self, "btn_conlang"):
-            self.btn_conlang.setChecked(on)
-            self.btn_conlang.setText("CONLANG: ON" if on else "CONLANG: OFF")
-            self.btn_conlang.setStyleSheet(
-                "QPushButton { background:#007acc; color:white; font-weight:bold; border:none; border-radius:4px; padding:2px 8px; }"
-                if on else ""
-            )
-        if not on:
-            self.clear_highlight()
-        for btn in self._key_buttons.values():
-            self._repaint_key(btn)
-
-    def _on_conlang_clicked(self):
-        self.conlang_toggle_requested.emit()
 
     def highlight_key(self, key_code: str):
         btn = self._key_buttons.get(key_code)

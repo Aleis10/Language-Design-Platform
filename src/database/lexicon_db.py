@@ -37,7 +37,7 @@ class LexiconRepository:
                 ON lexicon(language_id, headword);
             """)
 
- # Migration: add missing columns for existing .langarc projects
+            # Migration: add missing columns for existing .langarc projects
             cursor.execute("PRAGMA table_info(lexicon);")
             existing = {row["name"] for row in cursor.fetchall()}
             migrations = {
@@ -74,7 +74,7 @@ class LexiconRepository:
                 """
             )
 
- # Migration: bring over any legacy single audio_path -> lexicon_audio row
+            # Migration: bring over any legacy single audio_path -> lexicon_audio row
             cursor.execute(
                 "SELECT id, audio_path, ipa_reading FROM lexicon "
                 "WHERE audio_path IS NOT NULL AND audio_path != '';"
