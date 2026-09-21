@@ -263,18 +263,9 @@ class MainWindow(QMainWindow):
             self.kbd_button.setChecked(False)
 
     def _setup_osk_hotkey(self):
-        try:
-            self._osk_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Space"), self)
-            self._osk_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
-            self._osk_shortcut.activated.connect(self._toggle_osk)
-            self._osk_action = QAction("Toggle Digital Keyboard", self)
-            self._osk_action.setShortcut(QKeySequence("Ctrl+Shift+Space"))
-            self._osk_action.triggered.connect(self._toggle_osk)
-            self._osk_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-            self.addAction(self._osk_action)
-        except Exception:
-            self._osk_shortcut = None
-            self._osk_action = None
+        self._osk_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Space"), self)
+        self._osk_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        self._osk_shortcut.activated.connect(self._toggle_osk)
 
     def _reload_conlang_mappings(self):
         mappings: Dict[str, Dict] = {}
@@ -308,12 +299,6 @@ class MainWindow(QMainWindow):
         return None
 
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.KeyPress and not event.isAutoRepeat():
-            mods = event.modifiers()
-            if event.key() == Qt.Key.Key_Space and mods & Qt.KeyboardModifier.ControlModifier \
-                    and mods & Qt.KeyboardModifier.ShiftModifier:
-                self._toggle_osk()
-                return True
         if event.type() == QEvent.Type.KeyPress and self.osk is not None \
                 and not event.isAutoRepeat():
             key_code = self._qkey_to_key_code(event)

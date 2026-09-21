@@ -348,7 +348,6 @@ class KeyboardPage(QWidget):
             QMessageBox.information(self, "No Preset", "Select or create a preset first.")
             return
 
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             glyph_rows = self.glyph_repo.get_all_glyphs(self.language_id)
             if not glyph_rows:
@@ -378,16 +377,15 @@ class KeyboardPage(QWidget):
                     )
 
             QMessageBox.information(
-                self, "Layout Saved",
+                self,
+                "Layout Saved",
                 "Keyboard layout saved\n"
-                "Click the button on the bottom right to activate Digital Keyboard",
+                "Click the button on the bottom right to activate Digital Keyboard"
             )
             if callable(self.on_saved):
                 self.on_saved()
         except Exception as exc:
             QMessageBox.critical(self, "Rebuild Failed", f"Could not rebuild font:\n{exc}")
-        finally:
-            QApplication.restoreOverrideCursor()
         self.refresh()
 
     def _set_key_style(self, btn, object_name: str):

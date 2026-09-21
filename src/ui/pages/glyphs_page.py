@@ -144,19 +144,10 @@ class Glyphs_Page(QWidget):
         btn_add_group.setObjectName("BtnAddGroup")
         btn_add_group.clicked.connect(self.prompt_add_group)
 
-        btn_export_font = QPushButton("⬇ Export Font")
-        btn_export_font.setObjectName("BtnExportFont")
-        btn_export_font.setToolTip(
-            "Build a TrueType font from all glyphs (mapped to U+E000+) "
-            "so you can type them in the Lexicon."
-        )
-        btn_export_font.clicked.connect(self.export_font)
-
         tb_layout.addWidget(lbl_title)
         tb_layout.addSpacing(16)
         tb_layout.addWidget(self.input_search)
         tb_layout.addStretch()
-        tb_layout.addWidget(btn_export_font)
         tb_layout.addWidget(btn_add_group)
 
         gallery_layout.addWidget(top_bar)
