@@ -37,7 +37,7 @@ class FloatingKeyboardButton(QToolButton):
         self.setFixedSize(diameter, diameter)
         self.setIcon(_keyboard_icon(int(diameter * 0.56)))
         self.setIconSize(QSize(int(diameter * 0.56), int(diameter * 0.56)))
-        self.setToolTip("Toggle digital keyboard")
+        self.setToolTip("Activate Digital Keyboard")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setCheckable(True)
         self._update_style()

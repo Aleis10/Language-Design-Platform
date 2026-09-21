@@ -13,7 +13,7 @@ from PySide6.QtSvg import QSvgRenderer
 try:
     from database.keyboard_db import KeyboardRepository
     from database.glyph_db import GlyphRepository
-    from font_tools.font_registry import load_font_mapping
+    from digital_keyboard import load_font_mapping
 except (ImportError, ValueError):
     from ..database.keyboard_db import KeyboardRepository
     from ..database.glyph_db import GlyphRepository
@@ -188,7 +188,7 @@ class KeyboardPage(QWidget):
         self.lbl_count.setObjectName("KbdCount")
         toolbar.addWidget(self.lbl_count)
         toolbar.addStretch()
-        btn_save = QPushButton("Save & Rebuild Font")
+        btn_save = QPushButton("Save")
         btn_save.setObjectName("KbdSave")
         btn_save.setToolTip("Save this preset's mappings and rebuild the language font "
                             "from ALL glyphs, so the assigned glyphs become typeable everywhere.")
@@ -357,8 +357,7 @@ class KeyboardPage(QWidget):
                     "No glyphs yet — draw some logograms first, then Save to build the font.",
                 )
                 return
-            from font_tools.export_service import export_language_font
-            from font_tools.font_registry import get_fonts_dir, register_language_font
+            from digital_keyboard import export_language_font, get_fonts_dir, register_language_font
             fonts_dir = get_fonts_dir(self.data_dir) if self.data_dir else self.data_dir
             result = export_language_font(glyph_rows, fonts_dir)
             register_language_font(self.data_dir)
@@ -380,9 +379,8 @@ class KeyboardPage(QWidget):
 
             QMessageBox.information(
                 self, "Layout Saved",
-                f"Layout saved and font rebuilt ({result.num_glyphs} glyphs).\n"
-                "Your glyphs are now typeable everywhere — click a key or press the "
-                "physical key (with Conlang mode ON).",
+                "Keyboard layout saved\n"
+                "Click the button on the bottom right to activate Digital Keyboard",
             )
             if callable(self.on_saved):
                 self.on_saved()

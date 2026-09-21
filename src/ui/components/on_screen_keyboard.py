@@ -9,10 +9,10 @@ from PySide6.QtGui import QFont, QIcon, QPixmap
 
 try:
     from database.keyboard_db import KeyboardRepository
-    from font_tools.font_registry import glyph_character, conlang_font
+    from digital_keyboard import glyph_character, conlang_font
 except (ImportError, ValueError):
     from ..database.keyboard_db import KeyboardRepository
-    from ...font_tools.font_registry import glyph_character, conlang_font
+    from ...digital_keyboard import glyph_character, conlang_font
 
 QWERTY_ROWS = [
     ["`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="],

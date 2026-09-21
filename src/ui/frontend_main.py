@@ -48,7 +48,7 @@ class _ConlangFontFilter(QObject):
         if not self.data_dir:
             return None
         try:
-            from font_tools.font_registry import register_language_font
+            from digital_keyboard import register_language_font
             self._family = register_language_font(self.data_dir)
         except Exception:
             self._family = None
@@ -116,7 +116,7 @@ class MainWindow(QMainWindow):
 
         if self.session_dir:
             try:
-                from font_tools.font_registry import register_language_font
+                from digital_keyboard import register_language_font
                 register_language_font(self.session_dir)
             except Exception:
                 pass
@@ -280,7 +280,7 @@ class MainWindow(QMainWindow):
         mappings: Dict[str, Dict] = {}
         if self.keyboard_repo and self.language_id:
             try:
-                from font_tools.font_registry import glyph_character
+                from digital_keyboard import glyph_character
                 for m in self.keyboard_repo.all_mappings_for_language(self.language_id):
                     key_code = m.get("key_code")
                     if not key_code:
@@ -544,7 +544,7 @@ class MainWindow(QMainWindow):
     def _rebuild_pages(self):
         if self.session_dir:
             try:
-                from font_tools.font_registry import register_language_font
+                from digital_keyboard import register_language_font
                 register_language_font(self.session_dir)
             except Exception:
                 pass

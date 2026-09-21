@@ -30,7 +30,7 @@ class _EntryDialog(QDialog):
 
         if data_dir:
             try:
-                from font_tools.font_registry import apply_conlang_font
+                from digital_keyboard import apply_conlang_font
                 self.data_dir = data_dir
             except ImportError:
                 pass
@@ -41,7 +41,7 @@ class _EntryDialog(QDialog):
         self.input_headword.setPlaceholderText("Citation form (e.g. katana)")
         if data_dir:
             try:
-                from font_tools.font_registry import apply_conlang_font
+                from digital_keyboard import apply_conlang_font
                 apply_conlang_font(self.input_headword, data_dir, point_size=12)
             except Exception:
                 pass
@@ -323,7 +323,7 @@ class LexiconPage(QWidget):
             hw_item = QTableWidgetItem(entry.get("headword", ""))
             if hasattr(self, "data_dir") and self.data_dir:
                 try:
-                    from font_tools.font_registry import conlang_font
+                    from digital_keyboard import conlang_font
                     hw_item.setFont(conlang_font(point_size=12))
                 except Exception:
                     pass

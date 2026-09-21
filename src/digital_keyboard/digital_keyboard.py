@@ -1,19 +1,32 @@
 from typing import Dict, List, Optional, Sequence, Tuple, Mapping
+import json
+import os
+import re
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QPainterPath, QPainterPathStroker
+from PySide6.QtGui import QPainterPath, QPainterPathStroker, QFontDatabase, QFont
 
 from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.pens.cu2quPen import Cu2QuPen
-from fontTools.pens.boundsPen import BoundsPen
 
+try:
+    from ui.components.glyph_canvas import VectorStroke
+except ImportError:
+    from ..ui.components.glyph_canvas import VectorStroke
+
+# Font constants
 PPUA_START = 0xE000
 PPUA_END = 0xF8FF
-
 FONT_FAMILY = "LexiLogograms"
 PS_NAME = "LexiLogograms"
 UNITS_PER_EM = 1000  # logical canvas is 500x500 -> scale x2 for decent metrics
+FONTS_SUBDIR = "fonts"
+
+
+# Core font builder (stroke → closed contour → TTF)
 
 def stroke_to_closed_path(stroke_path: QPainterPath, width: float) -> QPainterPath:
     if stroke_path.isEmpty():
@@ -25,6 +38,7 @@ def stroke_to_closed_path(stroke_path: QPainterPath, width: float) -> QPainterPa
     stroker.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
     stroker.setMiterLimit(4.0)
     return stroker.createStroke(stroke_path)
+
 
 def qpainterpath_to_contours(
     path: QPainterPath, scale: float = 1.0
@@ -41,14 +55,14 @@ def qpainterpath_to_contours(
             if current:
                 contours.append(current)
             current = [("move", (_sx(el.x, scale), _sy(el.y, scale)),
-                        (_sx(el.x, scale), _sy(el.y, scale)),
-                        (_sx(el.x, scale), _sy(el.y, scale)))]
+                       (_sx(el.x, scale), _sy(el.y, scale)),
+                       (_sx(el.x, scale), _sy(el.y, scale)))]
             i += 1
 
         elif el.type == QPainterPath.ElementType.LineToElement:
             current.append(("line", (_sx(el.x, scale), _sy(el.y, scale)),
-                            (_sx(el.x, scale), _sy(el.y, scale)),
-                            (_sx(el.x, scale), _sy(el.y, scale))))
+                           (_sx(el.x, scale), _sy(el.y, scale)),
+                           (_sx(el.x, scale), _sy(el.y, scale))))
             i += 1
 
         elif el.type == QPainterPath.ElementType.CurveToElement:
@@ -70,6 +84,7 @@ def qpainterpath_to_contours(
     if current:
         contours.append(current)
     return contours
+
 
 def _flip_y(path: QPainterPath, canvas_size: float, scale: float) -> QPainterPath:
     out = QPainterPath()
@@ -105,11 +120,14 @@ def _flip_y(path: QPainterPath, canvas_size: float, scale: float) -> QPainterPat
             i += 1
     return out
 
+
 def _sx(x: float, scale: float) -> float:
     return float(x) * scale
 
+
 def _sy(y: float, scale: float) -> float:
     return float(y) * scale
+
 
 def _feed_contour_to_pen(
     pen,
@@ -126,11 +144,13 @@ def _feed_contour_to_pen(
             pen.curveTo(c1, c2, end)
     pen.closePath()
 
+
 class FilledContour:
     """Wrapper marking a pre-filled QPainterPath as a direct glyph contour."""
 
     def __init__(self, path: QPainterPath):
         self.path = path
+
 
 def strokes_to_ttf(
     glyphs: Dict[str, Sequence[Tuple[QPainterPath, float]]],
@@ -231,6 +251,7 @@ def strokes_to_ttf(
     fb.save(output_path)
     return {gname: cp for cp, gname in cmapping.items()}
 
+
 def _sanitize_glyph_name(name: str) -> str:
     out = []
     for ch in name:
@@ -246,6 +267,7 @@ def _sanitize_glyph_name(name: str) -> str:
     if s[0].isdigit():
         s = "g" + s
     return s[:63]
+
 
 def build_font_from_strokes(
     strokes_by_glyph: Mapping[str, Sequence[object]],
@@ -265,3 +287,199 @@ def build_font_from_strokes(
             entry.append((s.build_path(), s.width))
         glyphs[gname] = entry
     return strokes_to_ttf(glyphs, output_path, family=family)
+
+
+# Export service (glyph DB → font file)
+
+@dataclass
+class FontExportResult:
+    ttf_path: str
+    mapping_path: str
+    family_name: str
+    num_glyphs: int
+    mapping: Dict[str, int]
+
+
+def _extract_strokes(svg_str: str) -> List[object]:
+    if not svg_str:
+        return []
+    try:
+        root = ET.fromstring(svg_str)
+        meta = root.find(".//{*}metadata")
+        if meta is None:
+            meta = root.find(".//metadata")
+        if meta is not None and meta.text:
+            data = json.loads(meta.text.strip())
+            return [VectorStroke.from_dict(item) for item in data]
+    except Exception:
+        pass
+    # no stroke metadata: fall back to any <path d="..."> as a filled contour
+    try:
+        root = ET.fromstring(svg_str)
+        for el in root.iter():
+            if el.tag.split("}")[-1] == "path":
+                d = el.get("d")
+                if d:
+                    qp = _parse_svg_path(d)
+                    if not qp.isEmpty():
+                        return [FilledContour(qp)]
+    except Exception:
+        pass
+    return []
+
+
+def _parse_svg_path(d: str) -> QPainterPath:
+    """Parse an SVG path 'd' attribute (M/L/C/Q/Z) into a QPainterPath."""
+    path = QPainterPath()
+    tokens = re.findall(r"[MLCQZmlcqz]|-?\d*\.?\d+(?:[eE][-+]?\d+)?", d)
+    i = 0
+    cur = QPointF(0, 0)
+    n = len(tokens)
+    while i < n:
+        cmd = tokens[i]
+        i += 1
+        if cmd in "Mm":
+            x = float(tokens[i]); y = float(tokens[i + 1]); i += 2
+            if cmd == "m":
+                x += cur.x(); y += cur.y()
+            cur = QPointF(x, y)
+            path.moveTo(cur)
+        elif cmd in "Ll":
+            x = float(tokens[i]); y = float(tokens[i + 1]); i += 2
+            if cmd == "l":
+                x += cur.x(); y += cur.y()
+            cur = QPointF(x, y)
+            path.lineTo(cur)
+        elif cmd in "Cc":
+            x1 = float(tokens[i]); y1 = float(tokens[i + 1]); i += 2
+            x2 = float(tokens[i]); y2 = float(tokens[i + 1]); i += 2
+            x = float(tokens[i]); y = float(tokens[i + 1]); i += 2
+            if cmd == "c":
+                x1 += cur.x(); y1 += cur.y()
+                x2 += cur.x(); y2 += cur.y()
+                x += cur.x(); y += cur.y()
+            path.cubicTo(QPointF(x1, y1), QPointF(x2, y2), QPointF(x, y))
+            cur = QPointF(x, y)
+        elif cmd in "Qq":
+            x1 = float(tokens[i]); y1 = float(tokens[i + 1]); i += 2
+            x = float(tokens[i]); y = float(tokens[i + 1]); i += 2
+            if cmd == "q":
+                x1 += cur.x(); y1 += cur.y()
+                x += cur.x(); y += cur.y()
+            path.quadTo(QPointF(x1, y1), QPointF(x, y))
+            cur = QPointF(x, y)
+        elif cmd in "Zz":
+            path.closeSubpath()
+    return path
+
+
+def export_language_font(
+    glyph_rows: List[Dict],
+    output_dir: str,
+    family: str = FONT_FAMILY,
+) -> FontExportResult:
+    os.makedirs(output_dir, exist_ok=True)
+    strokes_by_name: Dict[str, List[object]] = {}
+    id_by_name: Dict[str, str] = {}
+    name_by_id: Dict[str, str] = {}
+
+    for row in glyph_rows:
+        name = row.get("name") or row.get("id") or "glyph"
+        strokes = _extract_strokes(row.get("svg_data", ""))
+        gname = _sanitize_glyph_name(name)
+        strokes_by_name[gname] = strokes
+        id_by_name[gname] = row.get("id", name)
+        name_by_id[row.get("id", name)] = gname
+
+    ttf_path = os.path.join(output_dir, f"{family}.ttf")
+    mapping = build_font_from_strokes(strokes_by_name, ttf_path, family=family)
+
+    by_id: Dict[str, int] = {}
+    for name, cp in mapping.items():
+        gid = id_by_name.get(name, name)
+        by_id[gid] = cp
+
+    mapping_path = os.path.join(output_dir, f"{family}.mapping.json")
+    with open(mapping_path, "w") as f:
+        json.dump(
+            {
+                "family": family,
+                "ttf": os.path.basename(ttf_path),
+                "glyphs": by_id,
+                "notes": "codepoints are in Unicode Private Use Area U+E000+; "
+                         "type the character in a field using this font to render the glyph",
+            },
+            f,
+            indent=2,
+        )
+
+    return FontExportResult(
+        ttf_path=ttf_path,
+        mapping_path=mapping_path,
+        family_name=family,
+        num_glyphs=len(by_id),
+        mapping=by_id,
+    )
+
+
+# Font registry (Qt font loading, glyph lookup)
+
+def get_fonts_dir(data_dir: str) -> str:
+    d = os.path.join(data_dir, FONTS_SUBDIR)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def register_language_font(data_dir: str) -> Optional[str]:
+    fonts_dir = get_fonts_dir(data_dir)
+    if not os.path.isdir(fonts_dir):
+        return None
+
+    candidates = sorted(
+        f for f in os.listdir(fonts_dir)
+        if f.lower().endswith((".ttf", ".otf"))
+    )
+    for fname in candidates:
+        path = os.path.join(fonts_dir, fname)
+        fid = QFontDatabase.addApplicationFont(path)
+        families = QFontDatabase.applicationFontFamilies(fid)
+        if families:
+            return families[0]
+    return None
+
+
+def load_font_mapping(data_dir: str) -> Dict[str, int]:
+    fonts_dir = get_fonts_dir(data_dir)
+    if not os.path.isdir(fonts_dir):
+        return {}
+    for fname in sorted(os.listdir(fonts_dir)):
+        if fname.endswith(".mapping.json"):
+            try:
+                with open(os.path.join(fonts_dir, fname), "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                glyphs = data.get("glyphs", {})
+                return {gid: int(cp) for gid, cp in glyphs.items()}
+            except Exception:
+                continue
+    return {}
+
+
+def glyph_codepoint(data_dir: str, glyph_id: str) -> Optional[int]:
+    return load_font_mapping(data_dir).get(glyph_id)
+
+
+def glyph_character(data_dir: str, glyph_id: str) -> str:
+    cp = glyph_codepoint(data_dir, glyph_id)
+    if cp is None:
+        return ""
+    return chr(cp)
+
+
+def conlang_font(family: Optional[str] = None, point_size: int = 11) -> QFont:
+    return QFont(family or FONT_FAMILY, point_size)
+
+
+def apply_conlang_font(widget, data_dir: str, point_size: int = 11) -> None:
+    fam = register_language_font(data_dir) or FONT_FAMILY
+    if fam:
+        widget.setFont(QFont(fam, point_size))

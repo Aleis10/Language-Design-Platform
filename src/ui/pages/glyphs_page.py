@@ -17,9 +17,9 @@ try:
     from ui.components.glyph_audio import GlyphAudioWidget
     from ui.components.ipa_picker import IPAPickerDialog
     from ui.components.dark_file_dialog import open_dark_dialog
-    from font_tools.font_registry import get_fonts_dir, register_language_font
+    from digital_keyboard import get_fonts_dir, register_language_font
 except (ImportError, ValueError):
-    from ...database.glyph_db import GlyphRepository
+    from ..database.glyph_db import GlyphRepository
     from ..components.glyph_canvas import GlyphCanvasWidget, CanvasStudioToolBar
     from ..components.glyph_audio import GlyphAudioWidget
     from ..components.ipa_picker import IPAPickerDialog
@@ -565,7 +565,7 @@ class Glyphs_Page(QWidget):
             QMessageBox.information(self, "Exported", f"Exported vector file to:\n{path}")
 
     def export_font(self):
-        from font_tools.export_service import export_language_font
+        from digital_keyboard import export_language_font
 
         glyphs = self.glyph_repo.get_all_glyphs(self.language_id)
         with_strokes = [g for g in glyphs if (g.get("svg_data") or "").strip()]
