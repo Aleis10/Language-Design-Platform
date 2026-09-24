@@ -3,12 +3,14 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QSlider,
-    QLabel, QToolButton, QButtonGroup, QFrame, QFileDialog, QMessageBox
+    QLabel, QToolButton, QButtonGroup, QFrame, QFileDialog, QMessageBox,
+    QGraphicsView, QGraphicsScene, QGraphicsPathItem, QGraphicsItem,
+    QDoubleSpinBox, QWidget
 )
 from PySide6.QtCore import Qt, QPointF, Signal, QRectF, QSize
 from PySide6.QtGui import (
     QPainter, QPen, QColor, QPainterPath, QPaintEvent,
-    QMouseEvent, QPixmap, QBrush
+    QMouseEvent, QPixmap, QBrush, QTransform
 )
 from PySide6.QtSvg import QSvgRenderer
 
@@ -75,127 +77,191 @@ class VectorStroke:
             is_eraser=data.get("is_eraser", False)
         )
 
-class GlyphCanvasWidget(QWidget):
+
+class StrokeGraphicsItem(QGraphicsPathItem):
+    # Custom QGraphicsItem that stores VectorStroke data
+    def __init__(self, stroke: VectorStroke):
+        super().__init__()
+        self.stroke = stroke
+        self._update_from_stroke()
+        
+        # Enable selection, movement, and transformation (scale/rotate handles)
+        # Qt has no ItemIsTransformable flag; setRotation/setScale work without one
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        
+        # Control point visibility
+        self.setTransformOriginPoint(self.boundingRect().center())
+        
+    def _update_from_stroke(self):
+        # Build path and set pen from VectorStroke data
+        path = self.stroke.build_path()
+        self.setPath(path)
+        
+        if self.stroke.is_eraser:
+            pen = QPen(QColor("#ffffff"), self.stroke.width, Qt.PenStyle.SolidLine, 
+                      Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        else:
+            pen = QPen(QColor(self.stroke.color), self.stroke.width, Qt.PenStyle.SolidLine,
+                      Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        self.setPen(pen)
+    
+    def get_transformed_stroke(self) -> VectorStroke:
+        # Get the current VectorStroke with item transform applied to points
+        transform = self.transform()
+        new_points = [transform.map(p) for p in self.stroke.points]
+        return VectorStroke(new_points, self.stroke.width, self.stroke.color, self.stroke.is_eraser)
+
+
+class GlyphCanvasWidget(QGraphicsView):
     content_changed = Signal()
 
     CANVAS_SIZE = 500  # Logical coordinate size (SVG viewBox reference)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        
+        # Create scene
+        self.scene = QGraphicsScene(self)
+        self.scene.setSceneRect(0, 0, self.CANVAS_SIZE, self.CANVAS_SIZE)
+        self.setScene(self.scene)
+        
+        # View settings
         self.setMinimumSize(self.CANVAS_SIZE, self.CANVAS_SIZE)
-        self.setMouseTracking(True)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-
-        self.strokes: List[VectorStroke] = []
+        self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        self.setDragMode(QGraphicsView.DragMode.NoDrag)
+        
+        # Undo/redo
         self.undo_stack: List[List[VectorStroke]] = []
         self.redo_stack: List[List[VectorStroke]] = []
-        self.current_stroke: Optional[VectorStroke] = None
-
-        self.current_tool = "pen"  # "pen" or "eraser"
+        
+        # Drawing state
+        self.current_tool = "pen"  # "pen", "eraser", "select"
         self.pen_width = 6.0
         self.pen_color = "#111111"
+        self.current_stroke: Optional[VectorStroke] = None
+        self.temp_drawing_item: Optional[StrokeGraphicsItem] = None
+        
+        # External SVG renderer (for imported SVGs without metadata)
         self.external_svg_renderer: Optional[QSvgRenderer] = None
-
+        
         self.setStyleSheet("background-color: #ffffff; border: 1px solid #dcdcdc; border-radius: 6px;")
 
     def _push_undo(self):
-        snapshot = [
-            VectorStroke(points=[QPointF(p.x(), p.y()) for p in s.points], width=s.width, color=s.color, is_eraser=s.is_eraser)
-            for s in self.strokes
-        ]
-        self.undo_stack.append(snapshot)
+        # Save current state to undo stack
+        strokes = self._get_all_strokes()
+        self.undo_stack.append(strokes)
         self.redo_stack.clear()
         if len(self.undo_stack) > 50:
             self.undo_stack.pop(0)
 
+    def _get_all_strokes(self) -> List[VectorStroke]:
+        # Extract VectorStroke objects from all StrokeGraphicsItems in scene
+        strokes = []
+        for item in self.scene.items():
+            if isinstance(item, StrokeGraphicsItem):
+                strokes.append(item.get_transformed_stroke())
+        return strokes
+
+    def _restore_strokes(self, strokes: List[VectorStroke]):
+        # Clear scene and restore strokes
+        self.scene.clear()
+        for stroke in strokes:
+            item = StrokeGraphicsItem(stroke)
+            self.scene.addItem(item)
+
     def undo(self):
         if not self.undo_stack:
             return
-        snapshot = [
-            VectorStroke(points=[QPointF(p.x(), p.y()) for p in s.points], width=s.width, color=s.color, is_eraser=s.is_eraser)
-            for s in self.strokes
-        ]
-        self.redo_stack.append(snapshot)
-        self.strokes = self.undo_stack.pop()
-        self.update()
+        current = self._get_all_strokes()
+        self.redo_stack.append(current)
+        restored = self.undo_stack.pop()
+        self._restore_strokes(restored)
         self.content_changed.emit()
 
     def redo(self):
         if not self.redo_stack:
             return
-        snapshot = [
-            VectorStroke(points=[QPointF(p.x(), p.y()) for p in s.points], width=s.width, color=s.color, is_eraser=s.is_eraser)
-            for s in self.strokes
-        ]
-        self.undo_stack.append(snapshot)
-        self.strokes = self.redo_stack.pop()
-        self.update()
+        current = self._get_all_strokes()
+        self.undo_stack.append(current)
+        restored = self.redo_stack.pop()
+        self._restore_strokes(restored)
         self.content_changed.emit()
 
     def clear_canvas(self):
-        if not self.strokes and not self.external_svg_renderer:
+        if not self.scene.items() and not self.external_svg_renderer:
             return
         self._push_undo()
-        self.strokes.clear()
+        self.scene.clear()
         self.external_svg_renderer = None
-        self.update()
         self.content_changed.emit()
 
     def mousePressEvent(self, event: QMouseEvent):
+        # For select tool, let QGraphicsView handle it
+        if self.current_tool == "select":
+            super().mousePressEvent(event)
+            return
+        
+        # For pen/eraser tools
         if event.button() == Qt.MouseButton.LeftButton:
             self._push_undo()
-            pos = event.position()
+            # Convert viewport position to scene position
+            scene_pos = self.mapToScene(event.pos())
             self.current_stroke = VectorStroke(
-                points=[QPointF(pos.x(), pos.y())],
+                points=[scene_pos],
                 width=self.pen_width,
                 color=self.pen_color,
                 is_eraser=(self.current_tool == "eraser")
             )
-            self.strokes.append(self.current_stroke)
-            self.update()
+            self.temp_drawing_item = StrokeGraphicsItem(self.current_stroke)
+            self.scene.addItem(self.temp_drawing_item)
+            event.accept()
 
     def mouseMoveEvent(self, event: QMouseEvent):
+        if self.current_tool == "select":
+            super().mouseMoveEvent(event)
+            return
+        
         if (event.buttons() & Qt.MouseButton.LeftButton) and self.current_stroke:
-            pos = event.position()
+            scene_pos = self.mapToScene(event.pos())
             last_p = self.current_stroke.points[-1]
-            dx = pos.x() - last_p.x()
-            dy = pos.y() - last_p.y()
-            if dx * dx + dy * dy >= 4.0:  # Distance >= 2px
-                self.current_stroke.points.append(QPointF(pos.x(), pos.y()))
-                self.update()
+            dx = scene_pos.x() - last_p.x()
+            dy = scene_pos.y() - last_p.y()
+            if dx * dx + dy * dy >= 4.0:
+                self.current_stroke.points.append(scene_pos)
+                self.temp_drawing_item._update_from_stroke()
+            event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent):
+        if self.current_tool == "select":
+            super().mouseReleaseEvent(event)
+            return
+        
         if event.button() == Qt.MouseButton.LeftButton and self.current_stroke:
             self.current_stroke = None
-            self.update()
+            self.temp_drawing_item = None
+            self.content_changed.emit()
+            event.accept()
+            self.temp_drawing_item = None
             self.content_changed.emit()
 
-    def paintEvent(self, event: QPaintEvent):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-
-        painter.fillRect(self.rect(), QColor("#ffffff"))
-
+    def drawBackground(self, painter: QPainter, rect: QRectF):
+        # Draw white background
+        painter.fillRect(rect, QColor("#ffffff"))
+        
+        # Draw external SVG if present
         if self.external_svg_renderer and self.external_svg_renderer.isValid():
             self.external_svg_renderer.render(painter, QRectF(0, 0, self.CANVAS_SIZE, self.CANVAS_SIZE))
 
-        for stroke in self.strokes:
-            path = stroke.build_path()
-            if stroke.is_eraser:
-                pen = QPen(QColor("#ffffff"), stroke.width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
-            else:
-                pen = QPen(QColor(stroke.color), stroke.width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
-            painter.setPen(pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawPath(path)
-
     def to_svg(self) -> str:
         size = self.CANVAS_SIZE
-        strokes_meta = json.dumps([s.to_dict() for s in self.strokes])
+        strokes = self._get_all_strokes()
+        strokes_meta = json.dumps([s.to_dict() for s in strokes])
         
         path_elements = []
-        for s in self.strokes:
+        for s in strokes:
             if s.is_eraser:
                 continue
             d = s.to_svg_path_data()
@@ -214,13 +280,12 @@ class GlyphCanvasWidget(QWidget):
         return "\n".join(svg_content)
 
     def load_svg(self, svg_str: str):
-        self.strokes.clear()
+        self.scene.clear()
         self.undo_stack.clear()
         self.redo_stack.clear()
         self.external_svg_renderer = None
 
         if not svg_str or not svg_str.strip():
-            self.update()
             return
 
         try:
@@ -231,16 +296,17 @@ class GlyphCanvasWidget(QWidget):
             if meta is not None and meta.text:
                 strokes_data = json.loads(meta.text.strip())
                 for item in strokes_data:
-                    self.strokes.append(VectorStroke.from_dict(item))
-                self.update()
+                    stroke = VectorStroke.from_dict(item)
+                    stroke_item = StrokeGraphicsItem(stroke)
+                    self.scene.addItem(stroke_item)
                 return
-        except Exception as e:
+        except Exception:
             pass
 
         try:
             svg_bytes = svg_str.encode("utf-8")
             self.external_svg_renderer = QSvgRenderer(svg_bytes)
-            self.update()
+            self.viewport().update()
         except Exception as e:
             print(f"[GlyphCanvasWidget] Error rendering external SVG: {e}")
 
@@ -258,7 +324,8 @@ class GlyphCanvasWidget(QWidget):
         if self.external_svg_renderer and self.external_svg_renderer.isValid():
             self.external_svg_renderer.render(painter, QRectF(0, 0, self.CANVAS_SIZE, self.CANVAS_SIZE))
 
-        for stroke in self.strokes:
+        strokes = self._get_all_strokes()
+        for stroke in strokes:
             path = stroke.build_path()
             if stroke.is_eraser:
                 pen = QPen(QColor("#ffffff"), stroke.width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
@@ -271,6 +338,7 @@ class GlyphCanvasWidget(QWidget):
         painter.end()
         return pixmap
 
+
 class CanvasStudioToolBar(QWidget):
     def __init__(self, canvas: GlyphCanvasWidget, parent=None):
         super().__init__(parent)
@@ -279,6 +347,11 @@ class CanvasStudioToolBar(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(10)
+
+        # Tool buttons
+        self.btn_select = QPushButton("⭘ Select")
+        self.btn_select.setCheckable(True)
+        self.btn_select.clicked.connect(lambda: self._set_tool("select"))
 
         self.btn_pen = QPushButton("✏️ Pen")
         self.btn_pen.setCheckable(True)
@@ -290,9 +363,11 @@ class CanvasStudioToolBar(QWidget):
         self.btn_eraser.clicked.connect(lambda: self._set_tool("eraser"))
 
         self.tool_group = QButtonGroup(self)
+        self.tool_group.addButton(self.btn_select)
         self.tool_group.addButton(self.btn_pen)
         self.tool_group.addButton(self.btn_eraser)
 
+        layout.addWidget(self.btn_select)
         layout.addWidget(self.btn_pen)
         layout.addWidget(self.btn_eraser)
 
@@ -331,6 +406,41 @@ class CanvasStudioToolBar(QWidget):
         layout.addWidget(self.btn_redo)
         layout.addWidget(self.btn_clear)
 
+        layout.addSpacing(16)
+
+        # Transform controls (show when Select tool is active)
+        lbl_rotate = QLabel("Rotate:")
+        lbl_rotate.setStyleSheet("font-size: 12px; color: #555555;")
+        self.spin_rotate = QDoubleSpinBox()
+        self.spin_rotate.setRange(-360, 360)
+        self.spin_rotate.setWrapping(True)
+        self.spin_rotate.setValue(0)
+        self.spin_rotate.setFixedWidth(70)
+        self.spin_rotate.setToolTip("Rotation in degrees")
+        self.spin_rotate.valueChanged.connect(self._on_rotate_changed)
+
+        lbl_scale = QLabel("Scale:")
+        lbl_scale.setStyleSheet("font-size: 12px; color: #555555;")
+        self.spin_scale = QDoubleSpinBox()
+        self.spin_scale.setRange(0.1, 10.0)
+        self.spin_scale.setValue(1.0)
+        self.spin_scale.setSingleStep(0.1)
+        self.spin_scale.setFixedWidth(70)
+        self.spin_scale.setToolTip("Scale factor")
+        self.spin_scale.valueChanged.connect(self._on_scale_changed)
+
+        btn_reset = QPushButton("Reset")
+        btn_reset.setToolTip("Reset transform on selected")
+        btn_reset.clicked.connect(self._on_reset_transform)
+
+        layout.addWidget(lbl_rotate)
+        layout.addWidget(self.spin_rotate)
+        layout.addWidget(lbl_scale)
+        layout.addWidget(self.spin_scale)
+        layout.addWidget(btn_reset)
+
+        layout.addStretch()
+
         self._style_buttons()
 
     def _style_buttons(self):
@@ -355,6 +465,10 @@ class CanvasStudioToolBar(QWidget):
 
     def _set_tool(self, tool: str):
         self.canvas.current_tool = tool
+        if tool == "select":
+            self.canvas.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+        else:
+            self.canvas.setDragMode(QGraphicsView.DragMode.NoDrag)
 
     def _on_width_changed(self, val: int):
         self.canvas.pen_width = float(val)
@@ -362,3 +476,32 @@ class CanvasStudioToolBar(QWidget):
 
     def _confirm_clear(self):
         self.canvas.clear_canvas()
+
+    def _on_rotate_changed(self, angle: float):
+        # Apply rotation to all selected items
+        items = self.canvas.scene.selectedItems()
+        if not items:
+            return
+        for item in items:
+            item.setRotation(angle)
+
+    def _on_scale_changed(self, scale: float):
+        # Apply scale to all selected items
+        items = self.canvas.scene.selectedItems()
+        if not items:
+            return
+        for item in items:
+            item.setTransformOriginPoint(item.boundingRect().center())
+            item.setScale(scale)
+
+    def _on_reset_transform(self):
+        # Reset transform on all selected items
+        items = self.canvas.scene.selectedItems()
+        if not items:
+            return
+        for item in items:
+            item.setTransform(QTransform())
+            item.setRotation(0)
+            item.setScale(1.0)
+        self.spin_rotate.setValue(0)
+        self.spin_scale.setValue(1.0)
