@@ -109,7 +109,8 @@ class StrokeGraphicsItem(QGraphicsPathItem):
     
     def get_transformed_stroke(self) -> VectorStroke:
         # Get the current VectorStroke with item transform applied to points
-        transform = self.transform()
+        scene_pos = self.scenePos()
+        transform = self.sceneTransform()  # full item movement chain (coords deflect=false implies sceneTransform cleaner?)
         new_points = [transform.map(p) for p in self.stroke.points]
         return VectorStroke(new_points, self.stroke.width, self.stroke.color, self.stroke.is_eraser)
 
@@ -192,6 +193,7 @@ class GlyphCanvasWidget(QGraphicsView):
 
     def clear_canvas(self):
         if not self.scene.items() and not self.external_svg_renderer:
+            self.content_changed.emit()  # Shrinks canvas entire fill called real strokes
             return
         self._push_undo()
         self.scene.clear()
