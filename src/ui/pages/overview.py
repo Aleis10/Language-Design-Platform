@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QLabel, QScrollArea, QFormLayout, QMessageBox, QDialog, QListWidget, QListWidgetItem
 )
 from PySide6.QtCore import Qt
+from digital_keyboard import conlang_font
 from PySide6.QtGui import QIcon
 
 class Overview_Page(QWidget):
@@ -123,6 +124,11 @@ class Overview_Page(QWidget):
         details_layout.addLayout(grid_layout)
         self.cards_layout.addWidget(details_card)
 
+        # Apply default conlang font to all inputs
+        default_font = conlang_font(point_size=12)
+        for widget in [self.input_exonym, self.input_endonym, self.input_code, self.input_demonym, self.input_pop, self.input_family]:
+            widget.setFont(default_font)
+
         history_card = QFrame()
         history_card.setProperty("class", "overview-card")
         h_layout = QVBoxLayout(history_card)
@@ -149,7 +155,10 @@ class Overview_Page(QWidget):
         c_layout.addWidget(self.text_culture)
         self.cards_layout.addWidget(culture_card)
 
-        self.cards_layout.addStretch()
+        # Apply default conlang font to all inputs and text areas
+        text_font = conlang_font(point_size=12)
+        for widget in [self.input_exonym, self.input_endonym, self.input_code, self.input_demonym, self.input_pop, self.input_family, self.text_history, self.text_culture]:
+            widget.setFont(text_font)
 
         scroll_area.setWidget(self.content_widget)
         main_layout.addWidget(scroll_area, stretch=1)
