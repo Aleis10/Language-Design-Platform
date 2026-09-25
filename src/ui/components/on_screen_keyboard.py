@@ -220,23 +220,27 @@ class OnScreenKeyboard(QWidget):
                         btn.setText("")
                         btn.setIcon(icon)
                         btn.setIconSize(QSize(22, 22))
-                        btn.setStyleSheet("QPushButton { background: #e3f0ff; border: 1px solid #4a90d9; border-radius: 5px; }")
+                        btn.setObjectName("KeyCapGlyph")
+                        btn.setStyleSheet("QPushButton#KeyCapGlyph { background: #e3f0ff; border: 1px solid #4a90d9; border-radius: 5px; }\nQPushButton#KeyCapGlyph:hover { background: #d4e6f1; }")
                         continue
                 btn.setIcon(QIcon())
                 btn.setText(m["char"] if m["char"] else key)
                 if m["char"] and any(ord(c) >= 0xE000 for c in m["char"]):
-                    btn.setStyleSheet("QPushButton { background: #e3f0ff; border: 1px solid #4a90d9; border-radius: 5px; font-size: 18px; }")
+                    btn.setObjectName("KeyCapGlyph")
+                    btn.setStyleSheet("QPushButton#KeyCapGlyph { background: #e3f0ff; border: 1px solid #4a90d9; border-radius: 5px; font-size: 18px; }\nQPushButton#KeyCapGlyph:hover { background: #d4e6f1; }")
                     try:
                         btn.setFont(conlang_font(point_size=18))
                     except Exception:
                         pass
                 else:
+                    btn.setObjectName("KeyCap")
                     btn.setStyleSheet("")
                     btn.setFont(QFont())
                 btn.setToolTip(f"{key} → {m['char'] or 'glyph'}")
             else:
                 btn.setIcon(QIcon())
                 btn.setText(FILTER_KEYS.get(key, (key, 1, "KeyCap"))[0])
+                btn.setObjectName("KeyCap")
                 btn.setStyleSheet("")
                 btn.setFont(QFont())
                 btn.setToolTip("")
@@ -372,16 +376,21 @@ class OnScreenKeyboard(QWidget):
                 btn.setText("")
                 btn.setIcon(icon)
                 btn.setIconSize(QSize(22, 22))
-                btn.setStyleSheet("QPushButton { background:#e3f0ff; border:1px solid #4a90d9; border-radius:5px; }")
+                btn.setObjectName("KeyCapGlyph")
+                btn.setStyleSheet("QPushButton#KeyCapGlyph { background: #e3f0ff; border: 1px solid #4a90d9; border-radius: 5px; }\nQPushButton#KeyCapGlyph:hover { background: #d4e6f1; }")
                 return
         btn.setIcon(QIcon())
         btn.setText(m["char"] if m["char"] else key)
         if m["char"] and any(ord(c) >= 0xE000 for c in m["char"]):
-            btn.setStyleSheet("QPushButton { background:#e3f0ff; border:1px solid #4a90d9; border-radius:5px; font-size:18px; }")
+            btn.setObjectName("KeyCapGlyph")
+            btn.setStyleSheet("QPushButton#KeyCapGlyph { background: #e3f0ff; border: 1px solid #4a90d9; border-radius: 5px; font-size: 18px; }\nQPushButton#KeyCapGlyph:hover { background: #d4e6f1; }")
             try:
                 btn.setFont(conlang_font(point_size=18))
             except Exception:
                 pass
         else:
+            btn.setObjectName("KeyCap")
+            btn.setStyleSheet("")
+            btn.setFont(QFont())
             btn.setStyleSheet("")
             btn.setFont(QFont())
