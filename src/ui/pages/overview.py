@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QLabel, QScrollArea, QFormLayout, QMessageBox, QDialog, QListWidget, QListWidgetItem
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon, QFont
 from digital_keyboard import conlang_font
 from PySide6.QtGui import QIcon
 
@@ -137,7 +138,6 @@ class Overview_Page(QWidget):
         h_title.setProperty("class", "section-title")
         self.text_history = AutoResizingTextEdit()
         self.text_history.setPlaceholderText("Describe the historical origins and evolution of the language...")
-        self.text_history.setMaximumHeight(100)
         h_layout.addWidget(h_title)
         h_layout.addWidget(self.text_history)
         self.cards_layout.addWidget(history_card)
@@ -150,7 +150,6 @@ class Overview_Page(QWidget):
         c_title.setProperty("class", "section-title")
         self.text_culture = AutoResizingTextEdit()
         self.text_culture.setPlaceholderText("Describe cultural context, registers, societal usage, or idioms...")
-        self.text_culture.setMaximumHeight(100)
         c_layout.addWidget(c_title)
         c_layout.addWidget(self.text_culture)
         self.cards_layout.addWidget(culture_card)
@@ -449,7 +448,8 @@ class AutoResizingTextEdit(QTextEdit):
     def __init__(self, placeholder=""):
         super().__init__()
         self.setPlaceholderText(placeholder)
-        self.setMinimumHeight(80)
+        self.setMinimumHeight(25)
+        self.setMaximumHeight(200)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.textChanged.connect(self.adjust_height)
 
@@ -457,7 +457,7 @@ class AutoResizingTextEdit(QTextEdit):
         doc_height = int(self.document().size().height())
         margins = self.contentsMargins()
         total_height = doc_height + margins.top() + margins.bottom() + 12
-        self.setFixedHeight(max(80, total_height))
+        self.setFixedHeight(max(25, total_height))
 
 class AutoResizingList(QListWidget):
     def __init__(self):
