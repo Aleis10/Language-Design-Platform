@@ -34,10 +34,13 @@ class LanguageOverviewRepository:
 
     def update_overview_field(self, language_id: str, field_name: str, value: Any):
         allowed_fields = {
-            "autonym", "exonym", "language_code", "is_spoken", "is_extinct",
-            "is_constructed", "constructed_type", "genetic_classification",
-            "glottocode", "iso_639_3", "notes"
-        }
+                    "autonym", "exonym", "language_code", "is_spoken", "is_extinct",
+                    "is_constructed", "constructed_type", "genetic_classification",
+                    "glottocode", "iso_639_3", "notes",
+                    "demonym", "speaker_population",
+                    "word_order", "morphology", "script_system",
+                    "history", "cultural_context", "status"
+                }
         if field_name not in allowed_fields:
             raise ValueError(f"Invalid field name: {field_name}")
 

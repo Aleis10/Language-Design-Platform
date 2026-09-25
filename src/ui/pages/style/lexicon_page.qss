@@ -34,14 +34,15 @@ QTableWidget#LexTable {
     selection-color: #111111;
 }
 QTableWidget#LexTable::item {
-    padding: 6px 8px;
+    padding: 12px 14px; /* Increased padding for better spacing */
     color: #111111;
+    font-size: 16px; /* Larger font for glyph readability */
 }
 QTableWidget#LexTable QHeaderView::section {
     background-color: #f0f2f5;
     border: none;
     border-bottom: 1px solid #dcdcdc;
-    padding: 6px 8px;
+    padding: 8px 12px;
     font-weight: bold;
     color: #333333;
 }

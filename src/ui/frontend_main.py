@@ -4,7 +4,7 @@ from typing import Dict, Optional
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QLabel,
     QMessageBox, QFileDialog, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox,
-    QApplication,
+    QApplication, QPushButton,
 )
 from PySide6.QtGui import QAction, QKeySequence, QFont, QShortcut, QKeyEvent
 from PySide6.QtCore import Qt, QEvent, QObject, Signal, QTimer
@@ -38,7 +38,7 @@ class _ConlangFontFilter(QObject):
         self.data_dir = data_dir
         self._family = None
         self._registered = False
-        self._queued = set() 
+        self._queued = set()
 
     def refresh_family(self):
         if self._registered:
@@ -55,13 +55,14 @@ class _ConlangFontFilter(QObject):
         return self._family
 
     def eventFilter(self, obj, event):
- 
         if event.type() in (QEvent.Type.Polish, QEvent.Type.ChildAdded):
+            if isinstance(obj, QApplication):
+                return False
             self._defer_apply(obj)
         return super().eventFilter(obj, event)
 
     def _defer_apply(self, w):
-        if not isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox)):
+        if not isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QPushButton, QLabel)):
             return
         if id(w) in self._queued:
             return
@@ -69,7 +70,7 @@ class _ConlangFontFilter(QObject):
         QTimer.singleShot(0, lambda: self._apply_to(w))
 
     def _apply_to(self, w):
-        if not isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox)):
+        if not isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QPushButton, QLabel)):
             return
         family = self.refresh_family()
         if not family:
@@ -77,7 +78,7 @@ class _ConlangFontFilter(QObject):
         try:
             cur = w.font().family()
             if cur == family:
-                return  
+                return
             w.setFont(QFont(family, w.font().pointSize() or 12))
         except Exception:
             pass
@@ -187,6 +188,7 @@ class MainWindow(QMainWindow):
         if app_instance is not None:
             app_instance.installEventFilter(self)
         self._reload_conlang_mappings()
+        self._osk_shortcut = None
         self._setup_osk_hotkey()
 
     def _update_window_title(self):
@@ -263,9 +265,10 @@ class MainWindow(QMainWindow):
             self.kbd_button.setChecked(False)
 
     def _setup_osk_hotkey(self):
-        self._osk_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Space"), self)
-        self._osk_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
-        self._osk_shortcut.activated.connect(self._toggle_osk)
+        if not self._osk_shortcut:
+            self._osk_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Space"), self)
+            self._osk_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            self._osk_shortcut.activated.connect(self._toggle_osk)
 
     def _reload_conlang_mappings(self):
         mappings: Dict[str, Dict] = {}

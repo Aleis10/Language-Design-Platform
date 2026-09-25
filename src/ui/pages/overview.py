@@ -214,7 +214,8 @@ class Overview_Page(QWidget):
             "cultural_context": self.text_culture.toPlainText().strip(),
             "status": self.status_combo.currentText().strip(),
         }
-        self.overview_repo.save_overview_data(self.language_id, payload)
+        for field_name, value in payload.items():
+            self.overview_repo.update_overview_field(self.language_id, field_name, value)
 
         for card in self.custom_cards:
             card.save_card_content()

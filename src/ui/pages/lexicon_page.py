@@ -321,17 +321,24 @@ class LexiconPage(QWidget):
         verbs = 0
         for row, entry in enumerate(entries):
             hw_item = QTableWidgetItem(entry.get("headword", ""))
-            if hasattr(self, "data_dir") and self.data_dir:
-                try:
-                    from digital_keyboard import conlang_font
-                    hw_item.setFont(conlang_font(point_size=12))
-                except Exception:
-                    pass
+            ipa_item = QTableWidgetItem(entry.get("ipa_reading", ""))
+            meaning_item = QTableWidgetItem(entry.get("meaning", ""))
+            english_item = QTableWidgetItem(entry.get("english_translation", ""))
+            # Apply the conlang font ONLY to cells that actually contain PUA glyph
+            # characters (U+E000+). Forcing it on plain text makes the font fall
+            # back and render as weird clumped/emoji glyphs.
+            try:
+                from digital_keyboard import conlang_font
+                for it in (hw_item, ipa_item, meaning_item, english_item):
+                    if any(ord(c) >= 0xE000 for c in it.text()):
+                        it.setFont(conlang_font(point_size=18))
+            except Exception:
+                pass
             self.table.setItem(row, 0, hw_item)
-            self.table.setItem(row, 1, QTableWidgetItem(entry.get("ipa_reading", "")))
+            self.table.setItem(row, 1, ipa_item)
             self.table.setItem(row, 2, QTableWidgetItem(entry.get("part_of_speech", "")))
-            self.table.setItem(row, 3, QTableWidgetItem(entry.get("meaning", "")))
-            self.table.setItem(row, 4, QTableWidgetItem(entry.get("english_translation", "")))
+            self.table.setItem(row, 3, meaning_item)
+            self.table.setItem(row, 4, english_item)
 
             variants = entry.get("audio_variants", [])
             variant_text = f"{len(variants)} recording(s)"

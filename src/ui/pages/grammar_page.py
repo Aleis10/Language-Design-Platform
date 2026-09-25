@@ -619,9 +619,18 @@ class GrammarPage(QWidget):
         self.rules_table.setRowCount(len(rules))
         for ri, rule in enumerate(rules):
             self.rules_table.setItem(ri, 0, QTableWidgetItem(rule.get("name", "")))
-            self.rules_table.setItem(ri, 1, QTableWidgetItem(rule.get("affix_pattern", "")))
+            affix_item = QTableWidgetItem(rule.get("affix_pattern", ""))
+            gloss_item = QTableWidgetItem(rule.get("gloss_tag", ""))
+            try:
+                from digital_keyboard import conlang_font
+                for it in (affix_item, gloss_item):
+                    if any(ord(c) >= 0xE000 for c in it.text()):
+                        it.setFont(conlang_font(point_size=18))
+            except Exception:
+                pass
+            self.rules_table.setItem(ri, 1, affix_item)
             self.rules_table.setItem(ri, 2, QTableWidgetItem(rule.get("affix_type", "")))
-            self.rules_table.setItem(ri, 3, QTableWidgetItem(rule.get("gloss_tag", "")))
+            self.rules_table.setItem(ri, 3, gloss_item)
             self.rules_table.setItem(ri, 4, QTableWidgetItem(rule.get("gloss_description", "")))
             cat_name = categories.get(rule.get("category_id"), "—")
             self.rules_table.setItem(ri, 5, QTableWidgetItem(cat_name))
@@ -743,9 +752,20 @@ class GrammarPage(QWidget):
         self.templates_table.setRowCount(len(templates))
         for ri, tpl in enumerate(templates):
             self.templates_table.setItem(ri, 0, QTableWidgetItem(tpl.get("name", "")))
-            self.templates_table.setItem(ri, 1, QTableWidgetItem(tpl.get("pattern", "")))
-            self.templates_table.setItem(ri, 2, QTableWidgetItem(tpl.get("gloss", "")))
-            self.templates_table.setItem(ri, 3, QTableWidgetItem(tpl.get("translation", "")))
+            t_item = QTableWidgetItem(tpl.get("pattern", ""))
+            g_item = QTableWidgetItem(tpl.get("gloss", ""))
+            translation_item = QTableWidgetItem(tpl.get("translation", ""))
+            try:
+                from digital_keyboard import conlang_font
+                for it in (t_item, g_item, translation_item):
+                    if any(ord(c) >= 0xE000 for c in it.text()):
+                        it.setFont(conlang_font(point_size=18))
+            except Exception:
+                pass
+            tbl = self.templates_table
+            tbl.setItem(ri, 1, t_item)
+            tbl.setItem(ri, 2, g_item)
+            tbl.setItem(ri, 3, translation_item)
             self.templates_table.setItem(ri, 4, QTableWidgetItem(tpl.get("notes", "")))
             self.templates_table.setItem(ri, 5, QTableWidgetItem(tpl.get("id", "")))
         self.lbl_templates_count.setText(f"{len(templates)} template{'s' if len(templates) != 1 else ''}")
