@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QScrollArea, QFrame, QStackedWidget, QDialog,
     QFormLayout, QMessageBox, QListWidget, QListWidgetItem,
-    QSizePolicy, QGridLayout
+    QSizePolicy, QGridLayout, QComboBox
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QFont
@@ -464,12 +464,109 @@ class Glyphs_Page(QWidget):
         btn_import_svg.clicked.connect(self._import_external_svg)
         m_layout.addWidget(lbl_ext)
         m_layout.addWidget(btn_import_svg)
-
+        
+        # Add Glyph button - adds existing glyphs
+        self.btn_add_existing = QPushButton("+ Add Glyph")
+        self.btn_add_existing.setToolTip("Add an existing glyph to edit")
+        self.btn_add_existing.setStyleSheet("padding: 6px 12px; border: 1px solid #cccccc; border-radius: 4px; background: white;")
+        self.btn_add_existing.clicked.connect(self._add_existing_glyph)
+        m_layout.addWidget(self.btn_add_existing)
+        
         m_layout.addStretch()
         w_layout.addWidget(self.meta_panel)
-
+        
         studio_layout.addWidget(workspace)
         self.stack.addWidget(self.studio_widget)
+
+    def _add_existing_glyph(self):
+        """Dialog to select and add an existing glyph."""
+        # Get all glyphs from all groups
+        groups = self.glyph_repo.get_groups(self.language_id)
+        if not groups:
+            QMessageBox.information(self, "No Glyphs", "No glyph groups available. Create a group first.")
+            return
+        
+        # Build a list of all glyphs with their group info
+        glyphs_list = []
+        glyph_display_names = []
+        
+        for group in groups:
+            group_glyphs = self.glyph_repo.get_glyphs_by_group(group["id"])
+            for glyph in group_glyphs:
+                display_name = f"{group['name']} > {glyph['name']}"
+                if glyph.get("meaning"):
+                    display_name += f" ({glyph['meaning']})"
+                glyphs_list.append((glyph, group))
+                glyph_display_names.append(display_name)
+        
+        if not glyph_display_names:
+            QMessageBox.information(self, "No Glyphs", "No glyphs found in any group.")
+            return
+        
+        # Show a dialog to select a glyph
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add Existing Glyph")
+        dialog.setFixedSize(500, 400)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        
+        lbl_title = QLabel("Select a glyph to add:")
+        lbl_title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(lbl_title)
+        
+        combo_glyphs = QComboBox()
+        combo_glyphs.addItems(glyph_display_names)
+        layout.addWidget(combo_glyphs)
+        
+        btn_box = QHBoxLayout()
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.clicked.connect(dialog.reject)
+        
+        btn_add = QPushButton("Add Glyph")
+        btn_add.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 6px 14px; border-radius: 4px;")
+        btn_add.clicked.connect(lambda: dialog.accept())
+        
+        btn_box.addStretch()
+        btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_add)
+        layout.addLayout(btn_box)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_index = combo_glyphs.currentIndex()
+            if selected_index >= 0:
+                selected_glyph, selected_group = glyphs_list[selected_index]
+                
+                # Create a copy of the selected glyph
+                new_glyph_id = self.glyph_repo.create_glyph(
+                    language_id=self.language_id,
+                    group_id=selected_group["id"],
+                    name=f"Copy of {selected_glyph['name']}",
+                    meaning=selected_glyph.get("meaning", ""),
+                    ipa_reading=selected_glyph.get("ipa_reading", ""),
+                    svg_data=selected_glyph.get("svg_data", ""),
+                    audio_path=selected_glyph.get("audio_path", "")
+                )
+                
+                # Get the newly created glyph data
+                new_glyph = self.glyph_repo.get_glyph(new_glyph_id)
+                
+                # Add it to the current group (if different)
+                if new_glyph["group_id"] != self.active_group_id:
+                    # Move to current group
+                    self.glyph_repo.update_glyph(
+                        new_glyph_id,
+                        group_id=self.active_group_id
+                    )
+                    
+                    # Refresh gallery and open studio mode
+                    self.refresh_gallery()
+                    self.open_studio_mode(new_glyph, {"id": self.active_group_id, "name": "Current Group"})
+                else:
+                    # Refresh gallery and open studio mode
+                    self.refresh_gallery()
+                    self.open_studio_mode(new_glyph, selected_group)
 
     def open_studio_mode(self, glyph: Dict[str, Any], group: Dict[str, Any]):
         self.active_glyph_id = glyph["id"]
