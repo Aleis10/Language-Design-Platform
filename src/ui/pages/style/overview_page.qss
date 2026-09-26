@@ -18,7 +18,7 @@ QComboBox#StatusCombo {
 
 QScrollArea#OverviewScrollArea {
     border: none;
-    background-color: #f8f9fa;
+    background-color: #1a1a1a;
 }
 
 /* Base Card Style */
@@ -30,7 +30,7 @@ QFrame.overview-card {
 
 QLabel{
     font-size: 15px;
-    color: #111111;
+    color: #000000;
 }
 
 QLabel.section-title {

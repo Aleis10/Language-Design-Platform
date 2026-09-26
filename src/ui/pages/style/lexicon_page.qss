@@ -29,22 +29,22 @@ QTableWidget#LexTable {
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     alternate-background-color: #f7f9fb;
-    gridline-color: #e8eaed;
+    gridline-color: #e0e0e0;
     selection-background-color: #e3f0ff;
     selection-color: #111111;
 }
 QTableWidget#LexTable::item {
     padding: 12px 14px; /* Increased padding for better spacing */
-    color: #111111;
+    color: #000000;
     font-size: 16px; /* Larger font for glyph readability */
 }
 QTableWidget#LexTable QHeaderView::section {
     background-color: #f0f2f5;
     border: none;
-    border-bottom: 1px solid #dcdcdc;
+    border-bottom: 1px solid #e0e0e0;
     padding: 8px 12px;
     font-weight: bold;
-    color: #333333;
+    color: #000000;
 }
 
 /* Audio variant list in dialog */
