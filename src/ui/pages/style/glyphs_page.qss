@@ -1,5 +1,11 @@
 /* Glyphs Page Stylesheet */
 
+/* Main Page Background */
+QWidget {
+    background-color: #ffffff;
+    color: #000000;
+}
+
 /* Group Container Cards */
 QFrame.group-card {
     background-color: #ffffff;
@@ -109,6 +115,11 @@ QPushButton#BtnSaveGlyph {
     padding: 8px 18px;
     border-radius: 6px;
     border: none;
+}
+
+QFrame#LogogramSection {
+    background-color: #ffffff;
+    color: #000000;
 }
 
 QPushButton#BtnSaveGlyph:hover {

@@ -130,7 +130,7 @@ class Glyphs_Page(QWidget):
         tb_layout.setSpacing(12)
 
         lbl_title = QLabel("Logograms & Script Workspace")
-        lbl_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #111111;")
+        lbl_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #000000;")
 
         self.input_search = QLineEdit()
         self.input_search.setPlaceholderText("🔍 Filter symbols by name, meaning, or IPA...")
