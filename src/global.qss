@@ -1,0 +1,42 @@
+/* General Defaults */
+QWidget {
+    background-color: #f8f9fa;
+    color: #212529;
+    font-family: Arial, sans-serif;
+    font-size: 11pt;
+}
+
+/* Labels (used everywhere) */
+QLabel {
+    color: #111111;
+    font-size: 13px;
+}
+
+/* Input Fields (shared across pages) */
+QLineEdit, QTextEdit, QComboBox, QListWidget {
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 6px 8px;
+    background-color: #ffffff;
+    color: #111111;
+}
+
+QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QListWidget:focus {
+    border: 1px solid #007acc;
+}
+
+/* General Buttons (default, hover, pressed) */
+QPushButton {
+    border-radius: 4px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+QPushButton:hover {
+    background-color: #e5e5e5;
+}
+
+QPushButton:pressed {
+    background-color: #d5d5d5;
+}

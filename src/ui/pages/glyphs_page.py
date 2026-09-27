@@ -25,14 +25,12 @@ except (ImportError, ValueError):
     from ..components.ipa_picker import IPAPickerDialog
     from ..components.dark_file_dialog import open_dark_dialog
     from ...font_tools.font_registry import get_fonts_dir, register_language_font
-
 def get_base_data_dir() -> str:
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     data_dir = os.path.join(root, "data")
     os.makedirs(os.path.join(data_dir, "images", "svg"), exist_ok=True)
     os.makedirs(os.path.join(data_dir, "audio", "glyphs"), exist_ok=True)
     return data_dir
-
 class AddGroupDialog(QDialog):
     def __init__(self, group_name: str = "", group_desc: str = "", parent=None):
         super().__init__(parent)
@@ -74,7 +72,6 @@ class AddGroupDialog(QDialog):
 
     def get_data(self):
         return self.input_name.text().strip(), self.input_desc.text().strip()
-
 class Glyphs_Page(QWidget):
     def __init__(self, glyph_repo: GlyphRepository, language_id: str, db_path: str = "", session_dir: str = "", parent=None):
         super().__init__(parent)
@@ -192,7 +189,7 @@ class Glyphs_Page(QWidget):
             elayout.addWidget(ebtn, alignment=Qt.AlignmentFlag.AlignCenter)
             self.cards_layout.addWidget(empty)
             return
-
+        
         for group in groups:
             card = self._create_group_card(group)
             self.cards_layout.addWidget(card)
@@ -654,7 +651,6 @@ class Glyphs_Page(QWidget):
 
     def export_font(self):
         from digital_keyboard import export_language_font
-
         glyphs = self.glyph_repo.get_all_glyphs(self.language_id)
         with_strokes = [g for g in glyphs if (g.get("svg_data") or "").strip()]
         if not with_strokes:
@@ -751,7 +747,7 @@ class Glyphs_Page(QWidget):
             widget = item.widget()
             if widget:
                 widget.deleteLater()
-
+        
         groups = self.glyph_repo.get_groups(self.language_id)
         for group in groups:
             all_glyphs = self.glyph_repo.get_glyphs_by_group(group["id"])
@@ -794,3 +790,167 @@ class Glyphs_Page(QWidget):
 
         card_layout.addWidget(tiles_container)
         return card
+
+    def _create_group_card(self, group: Dict[str, Any]) -> QFrame:
+        card = QFrame()
+        card.setProperty("class", "group-card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(0, 0, 0, 12)
+        card_layout.setSpacing(10)
+
+        header = QFrame()
+        header.setObjectName("GroupHeader")
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(14, 10, 14, 10)
+        h_layout.setSpacing(10)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+
+        title_row = QHBoxLayout()
+        lbl_name = QLabel(group["name"])
+        lbl_name.setProperty("class", "group-title")
+        
+        glyphs = self.glyph_repo.get_glyphs_by_group(group["id"])
+        badge = QLabel(f"{len(glyphs)} symbols")
+        badge.setProperty("class", "badge-count")
+
+        title_row.addWidget(lbl_name)
+        title_row.addWidget(badge)
+        title_row.addStretch()
+
+        desc_text = group.get("description", "")
+        lbl_desc = QLabel(desc_text) if desc_text else None
+        if lbl_desc:
+            lbl_desc.setProperty("class", "group-desc")
+
+        title_col.addLayout(title_row)
+        if lbl_desc:
+            title_col.addWidget(lbl_desc)
+
+        btn_add = QPushButton("+ Add Glyph")
+        btn_add.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 4px 10px; border-radius: 4px;")
+        btn_add.clicked.connect(lambda _, gid=group["id"], gname=group["name"]: self.create_new_glyph(gid, gname))
+
+        btn_rename = QPushButton("✏️")
+        btn_rename.setToolTip("Rename Group")
+        btn_rename.clicked.connect(lambda _, g=group: self.prompt_edit_group(g))
+
+        btn_del = QPushButton("🗑")
+        btn_del.setToolTip("Delete Group")
+        btn_del.setStyleSheet("color: #d9534f;")
+        btn_del.clicked.connect(lambda _, gid=group["id"], gname=group["name"]: self.confirm_delete_group(gid, gname))
+
+        h_layout.addLayout(title_col)
+        h_layout.addStretch()
+        h_layout.addWidget(btn_add)
+        h_layout.addWidget(btn_rename)
+        h_layout.addWidget(btn_del)
+
+        card_layout.addWidget(header)
+
+        tiles_container = QWidget()
+        grid = QGridLayout(tiles_container)
+        grid.setContentsMargins(14, 6, 14, 6)
+        grid.setSpacing(12)
+
+        cols = 5
+        idx = 0
+        for glyph in glyphs:
+            tile = self._create_glyph_tile(glyph, group)
+            grid.addWidget(tile, idx // cols, idx % cols)
+            idx += 1
+
+        add_tile = self._create_add_tile(group["id"], group["name"])
+        grid.addWidget(add_tile, idx // cols, idx % cols)
+
+        card_layout.addWidget(tiles_container)
+        return card
+
+    def _create_glyph_tile(self, glyph: Dict[str, Any], group: Dict[str, Any]) -> QFrame:
+        tile = QFrame()
+        tile.setProperty("class", "glyph-tile")
+        t_layout = QVBoxLayout(tile)
+        t_layout.setContentsMargins(10, 10, 10, 10)
+        t_layout.setSpacing(4)
+        t_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        lbl_preview = QLabel()
+        lbl_preview.setFixedSize(90, 90)
+        lbl_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_preview.setStyleSheet("background-color: #fafafa; border: 1px solid #eeeeee; border-radius: 4px;")
+
+        svg_str = glyph.get("svg_data", "")
+        if svg_str and svg_str.strip():
+            temp_canvas = GlyphCanvasWidget()
+            temp_canvas.load_svg(svg_str)
+            pixmap = temp_canvas.render_thumbnail(86)
+            lbl_preview.setPixmap(pixmap)
+        else:
+            lbl_preview.setText("[Empty]")
+            lbl_preview.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+
+        lbl_name = QLabel(glyph["name"])
+        lbl_name.setStyleSheet("font-weight: bold; font-size: 13px; color: #111111;")
+        lbl_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        lbl_meaning = QLabel(glyph.get("meaning", "") or "—")
+        lbl_meaning.setStyleSheet("font-size: 11px; color: #666666;")
+        lbl_meaning.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        badges_row = QHBoxLayout()
+        badges_row.setSpacing(4)
+        badges_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        if glyph.get("ipa_reading"):
+            ipa_lbl = QLabel(f"/{glyph['ipa_reading']}/")
+            ipa_lbl.setStyleSheet("font-family: monospace; font-size: 10px; background: #eef4ff; color: #005999; padding: 1px 5px; border-radius: 3px;")
+            badges_row.addWidget(ipa_lbl)
+
+        if glyph.get("audio_path"):
+            audio_lbl = QLabel("🔊")
+            audio_lbl.setToolTip("Pronunciation audio attached")
+            badges_row.addWidget(audio_lbl)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+        btn_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        btn_edit = QPushButton("Edit")
+        btn_edit.setStyleSheet("background-color: #007acc; color: white; padding: 3px 10px; font-size: 11px; border-radius: 3px;")
+        btn_edit.clicked.connect(lambda _, g=glyph, grp=group: self.open_studio_mode(g, grp))
+
+        btn_del = QPushButton("🗑")
+        btn_del.setStyleSheet("border: none; color: #888888; font-size: 11px;")
+        btn_del.setToolTip("Delete Glyph")
+        btn_del.clicked.connect(lambda _, gid=glyph["id"], gname=glyph["name"]: self.confirm_delete_glyph(gid, gname))
+
+        btn_row.addWidget(btn_edit)
+        btn_row.addWidget(btn_del)
+
+        t_layout.addWidget(lbl_preview, alignment=Qt.AlignmentFlag.AlignCenter)
+        t_layout.addWidget(lbl_name, alignment=Qt.AlignmentFlag.AlignCenter)
+        t_layout.addWidget(lbl_meaning, alignment=Qt.AlignmentFlag.AlignCenter)
+        t_layout.addLayout(badges_row)
+        t_layout.addLayout(btn_row)
+
+        return tile
+
+    def _create_add_tile(self, group_id: str, group_name: str) -> QFrame:
+        tile = QFrame()
+        tile.setProperty("class", "glyph-tile-add")
+        t_layout = QVBoxLayout(tile)
+        t_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        t_layout.setSpacing(6)
+
+        lbl_plus = QLabel("+")
+        lbl_plus.setStyleSheet("font-size: 28px; color: #007acc; font-weight: bold;")
+        lbl_txt = QLabel("New Glyph")
+        lbl_txt.setStyleSheet("font-size: 12px; color: #555555; font-weight: bold;")
+
+        t_layout.addWidget(lbl_plus, alignment=Qt.AlignmentFlag.AlignCenter)
+        t_layout.addWidget(lbl_txt, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        tile.mousePressEvent = lambda e: self.create_new_glyph(group_id, group_name)
+        tile.setCursor(Qt.CursorShape.PointingHandCursor)
+        return tile
