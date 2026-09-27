@@ -1,5 +1,3 @@
-/* Page Background */
-
 /* Top Header */
 QWidget#StickyTopBar {
     background-color: #ffffff;
@@ -18,7 +16,7 @@ QComboBox#StatusCombo {
 
 QScrollArea#OverviewScrollArea {
     border: none;
-    background-color: #1a1a1a;
+    background-color: #f8f9fa;
 }
 
 /* Base Card Style */
@@ -30,7 +28,7 @@ QFrame.overview-card {
 
 QLabel{
     font-size: 15px;
-    color: #000000;
+    color: #111111;
 }
 
 QLabel.section-title {

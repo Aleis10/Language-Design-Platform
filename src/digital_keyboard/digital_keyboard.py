@@ -313,7 +313,7 @@ def _extract_strokes(svg_str: str) -> List[object]:
             return [VectorStroke.from_dict(item) for item in data]
     except Exception:
         pass
-    # no stroke metadata: fall back to any <path d="..."> as a filled contour
+    # no stroke metadata
     try:
         root = ET.fromstring(svg_str)
         for el in root.iter():
@@ -329,7 +329,7 @@ def _extract_strokes(svg_str: str) -> List[object]:
 
 
 def _parse_svg_path(d: str) -> QPainterPath:
-    """Parse an SVG path 'd' attribute (M/L/C/Q/Z) into a QPainterPath."""
+    #Parse an SVG path 'd' attribute (M/L/C/Q/Z) into a QPainterPath
     path = QPainterPath()
     tokens = re.findall(r"[MLCQZmlcqz]|-?\d*\.?\d+(?:[eE][-+]?\d+)?", d)
     i = 0

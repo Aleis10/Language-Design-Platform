@@ -8,7 +8,7 @@ QWidget#GlyphsTopBar {
 
 QScrollArea#GlyphsScrollArea {
     border: none;
-    background-color: #1a1a1a;
+    background-color: #f8f9fa;
 }
 
 /* Group Container Cards */
