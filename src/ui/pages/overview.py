@@ -448,7 +448,7 @@ class AutoResizingTextEdit(QTextEdit):
     def __init__(self, placeholder=""):
         super().__init__()
         self.setPlaceholderText(placeholder)
-        self.setMinimumHeight(25)
+        self.setMinimumHeight(200)
         self.setMaximumHeight(200)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.textChanged.connect(self.adjust_height)
@@ -457,7 +457,7 @@ class AutoResizingTextEdit(QTextEdit):
         doc_height = int(self.document().size().height())
         margins = self.contentsMargins()
         total_height = doc_height + margins.top() + margins.bottom() + 12
-        self.setFixedHeight(max(25, total_height))
+        self.setFixedHeight(max(200, total_height))
 
 class AutoResizingList(QListWidget):
     def __init__(self):
