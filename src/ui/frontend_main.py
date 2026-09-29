@@ -4,7 +4,7 @@ from typing import Dict, Optional
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QLabel,
     QMessageBox, QFileDialog, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox,
-    QApplication, QPushButton,
+    QPushButton, QTableWidget, QTableView, QApplication,
 )
 from PySide6.QtGui import QAction, QKeySequence, QFont, QShortcut, QKeyEvent
 from PySide6.QtCore import Qt, QEvent, QObject, Signal, QTimer
@@ -70,7 +70,7 @@ class _ConlangFontFilter(QObject):
         QTimer.singleShot(0, lambda: self._apply_to(w))
 
     def _apply_to(self, w):
-        if not isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QPushButton, QLabel)):
+        if not isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QPushButton, QLabel, QTableWidget, QTableView)):
             return
         family = self.refresh_family()
         if not family:
@@ -79,7 +79,14 @@ class _ConlangFontFilter(QObject):
             cur = w.font().family()
             if cur == family:
                 return
-            w.setFont(QFont(family, w.font().pointSize() or 12))
+            if isinstance(w, QTableWidget) or isinstance(w, QTableView):
+                for i in range(w.rowCount()):
+                    for j in range(w.columnCount()):
+                        itm = w.item(i, j)
+                        if itm:  # Apply font to item level
+                            itm.setFont(QFont(family, w.font().pointSize() or 12))
+            else:  # Default handling for other widgets
+                w.setFont(QFont(family, w.font().pointSize() or 12))
         except Exception:
             pass
 
