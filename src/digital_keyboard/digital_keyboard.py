@@ -1,12 +1,18 @@
 from typing import Dict, List, Optional, Sequence, Tuple, Mapping
+import hashlib
+import io
 import json
 import os
 import re
+import weakref
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QByteArray, QPointF, Qt
 from PySide6.QtGui import QPainterPath, QPainterPathStroker, QFontDatabase, QFont
+from PySide6.QtWidgets import (
+    QStyledItemDelegate, QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox,
+)
 
 from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
@@ -157,6 +163,7 @@ def strokes_to_ttf(
     output_path: str,
     family: str = FONT_FAMILY,
     units_per_em: int = UNITS_PER_EM,
+    codepoints: Optional[Dict[str, int]] = None,
 ) -> Dict[str, int]:
     scale = units_per_em / 500.0
     glyph_order: List[str] = [".notdef"]
@@ -192,7 +199,12 @@ def strokes_to_ttf(
                 _feed_contour_to_pen(qupen, contour)
         pen_map[gname_clean] = pen
 
-        if cp <= PPUA_END:
+        # FIX: use the caller-supplied STABLE codepoint when there is one.
+        # (Before, codepoints were handed out by loop position, so adding,
+        # deleting or reordering a glyph shifted every later glyph.)
+        if codepoints and gname_clean in codepoints:
+            cmapping[codepoints[gname_clean]] = gname_clean
+        elif cp <= PPUA_END:
             cmapping[cp] = gname_clean
             cp += 1
 
@@ -273,6 +285,7 @@ def build_font_from_strokes(
     strokes_by_glyph: Mapping[str, Sequence[object]],
     output_path: str,
     family: str = FONT_FAMILY,
+    codepoints: Optional[Dict[str, int]] = None,
 ) -> Dict[str, int]:
     glyphs: Dict[str, List[Tuple[object, float]]] = {}
     for gname, strokes in strokes_by_glyph.items():
@@ -286,7 +299,7 @@ def build_font_from_strokes(
                 continue
             entry.append((s.build_path(), s.width))
         glyphs[gname] = entry
-    return strokes_to_ttf(glyphs, output_path, family=family)
+    return strokes_to_ttf(glyphs, output_path, family=family, codepoints=codepoints)
 
 
 # Export service (glyph DB → font file)
@@ -373,41 +386,70 @@ def _parse_svg_path(d: str) -> QPainterPath:
     return path
 
 
+def _load_codepoint_table(output_dir: str, family: str) -> Tuple[Dict[str, int], int]:
+    """Read the previous mapping.json so existing glyphs KEEP their codepoint."""
+    path = os.path.join(output_dir, f"{family}.mapping.json")
+    table: Dict[str, int] = {}
+    next_cp = PPUA_START
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for gid, cp in data.get("glyphs", {}).items():
+                cp = int(cp)
+                if PPUA_START <= cp <= PPUA_END:
+                    table[str(gid)] = cp
+            next_cp = max(int(data.get("next_cp", PPUA_START)), PPUA_START)
+        except Exception:
+            pass
+    if table:
+        next_cp = max(next_cp, max(table.values()) + 1)
+    return table, next_cp
+
+
 def export_language_font(
     glyph_rows: List[Dict],
     output_dir: str,
     family: str = FONT_FAMILY,
 ) -> FontExportResult:
     os.makedirs(output_dir, exist_ok=True)
-    strokes_by_name: Dict[str, List[object]] = {}
-    id_by_name: Dict[str, str] = {}
-    name_by_id: Dict[str, str] = {}
 
+    # 1) Stable codepoint per glyph ID (never per list position, never reused).
+    table, next_cp = _load_codepoint_table(output_dir, family)
+    current: Dict[str, int] = {}
     for row in glyph_rows:
-        name = row.get("name") or row.get("id") or "glyph"
-        strokes = _extract_strokes(row.get("svg_data", ""))
-        gname = _sanitize_glyph_name(name)
-        strokes_by_name[gname] = strokes
-        id_by_name[gname] = row.get("id", name)
-        name_by_id[row.get("id", name)] = gname
+        gid = str(row.get("id") or row.get("name") or "glyph")
+        if gid not in table:
+            if next_cp > PPUA_END:
+                raise RuntimeError("Ran out of Private Use Area codepoints")
+            table[gid] = next_cp
+            next_cp += 1
+        current[gid] = table[gid]
+
+    # 2) Build the font. Internal glyph names come from the codepoint, so two
+    #    glyphs that share a display name no longer overwrite each other.
+    strokes_by_name: Dict[str, List[object]] = {}
+    cp_by_name: Dict[str, int] = {}
+    for row in glyph_rows:
+        gid = str(row.get("id") or row.get("name") or "glyph")
+        cp = current[gid]
+        gname = f"uni{cp:04X}"
+        strokes_by_name[gname] = _extract_strokes(row.get("svg_data", ""))
+        cp_by_name[gname] = cp
 
     ttf_path = os.path.join(output_dir, f"{family}.ttf")
-    mapping = build_font_from_strokes(strokes_by_name, ttf_path, family=family)
-
-    by_id: Dict[str, int] = {}
-    for name, cp in mapping.items():
-        gid = id_by_name.get(name, name)
-        by_id[gid] = cp
+    build_font_from_strokes(strokes_by_name, ttf_path, family=family, codepoints=cp_by_name)
 
     mapping_path = os.path.join(output_dir, f"{family}.mapping.json")
-    with open(mapping_path, "w") as f:
+    with open(mapping_path, "w", encoding="utf-8") as f:
         json.dump(
             {
                 "family": family,
                 "ttf": os.path.basename(ttf_path),
-                "glyphs": by_id,
-                "notes": "codepoints are in Unicode Private Use Area U+E000+; "
-                         "type the character in a field using this font to render the glyph",
+                "glyphs": current,
+                "next_cp": next_cp,
+                "notes": "codepoints are in Unicode Private Use Area U+E000+ and are "
+                         "STABLE per glyph id (never reassigned)",
             },
             f,
             indent=2,
@@ -417,8 +459,8 @@ def export_language_font(
         ttf_path=ttf_path,
         mapping_path=mapping_path,
         family_name=family,
-        num_glyphs=len(by_id),
-        mapping=by_id,
+        num_glyphs=len(current),
+        mapping=dict(current),
     )
 
 
@@ -430,22 +472,72 @@ def get_fonts_dir(data_dir: str) -> str:
     return d
 
 
+_REGISTERED_BY_DIGEST: Dict[str, str] = {}   # content hash -> unique family
+_ACTIVE_FAMILY: Optional[str] = None
+
+
+def _register_ttf_unique(path: str) -> Optional[str]:
+    """Register a TTF under a content-unique family name.
+
+    Qt/fontconfig keeps the FIRST font it ever saw for a family name and
+    ignores later files with the same name. Re-exporting the font during a
+    session therefore left the UI drawing the OLD outlines while the keyboard
+    mapping already pointed at the NEW codepoints (= consistent wrong glyphs).
+    Renaming the family per content hash makes every rebuild a new family.
+    """
+    from fontTools.ttLib import TTFont
+
+    with open(path, "rb") as f:
+        raw = f.read()
+    digest = hashlib.sha1(raw).hexdigest()[:10]
+    if digest in _REGISTERED_BY_DIGEST:
+        return _REGISTERED_BY_DIGEST[digest]
+
+    family = f"{FONT_FAMILY}_{digest}"
+    font = TTFont(io.BytesIO(raw))
+    for rec in font["name"].names:
+        if rec.nameID in (1, 4, 16):
+            rec.string = family
+        elif rec.nameID == 6:
+            rec.string = family
+    buf = io.BytesIO()
+    font.save(buf)
+
+    fid = QFontDatabase.addApplicationFontFromData(QByteArray(buf.getvalue()))
+    if fid < 0:
+        return None
+    families = QFontDatabase.applicationFontFamilies(fid)
+    if not families:
+        return None
+    _REGISTERED_BY_DIGEST[digest] = families[0]
+    return families[0]
+
+
 def register_language_font(data_dir: str) -> Optional[str]:
+    global _ACTIVE_FAMILY
     fonts_dir = get_fonts_dir(data_dir)
     if not os.path.isdir(fonts_dir):
-        return None
+        return _ACTIVE_FAMILY
 
-    candidates = sorted(
-        f for f in os.listdir(fonts_dir)
+    preferred = os.path.join(fonts_dir, f"{FONT_FAMILY}.ttf")
+    candidates = [preferred] if os.path.exists(preferred) else []
+    candidates += [
+        os.path.join(fonts_dir, f)
+        for f in sorted(os.listdir(fonts_dir))
         if f.lower().endswith((".ttf", ".otf"))
-    )
-    for fname in candidates:
-        path = os.path.join(fonts_dir, fname)
-        fid = QFontDatabase.addApplicationFont(path)
-        families = QFontDatabase.applicationFontFamilies(fid)
-        if families:
-            return families[0]
-    return None
+        and os.path.join(fonts_dir, f) not in candidates
+    ]
+    for path in candidates:
+        try:
+            fam = _register_ttf_unique(path)
+        except Exception:
+            fam = None
+        if fam:
+            if fam != _ACTIVE_FAMILY:
+                _ACTIVE_FAMILY = fam
+                _refresh_tracked()      # every page's fields/tables pick up the new build
+            return fam
+    return _ACTIVE_FAMILY
 
 
 def load_font_mapping(data_dir: str) -> Dict[str, int]:
@@ -475,11 +567,107 @@ def glyph_character(data_dir: str, glyph_id: str) -> str:
     return chr(cp)
 
 
+def active_conlang_family() -> str:
+    return _ACTIVE_FAMILY or FONT_FAMILY
+
+
 def conlang_font(family: Optional[str] = None, point_size: int = 11) -> QFont:
-    return QFont(family or FONT_FAMILY, point_size)
+    """Mixed font: conlang family first, normal UI font as per-character fallback.
+
+    The conlang TTF only contains the PPUA codepoints, so Latin/IPA/umlaut
+    characters fall through to the system font instead of rendering blank,
+    and PPUA characters can never fall through to a random system font.
+    """
+    fam = family or active_conlang_family()
+    ui_family = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont).family()
+    font = QFont(fam, point_size)
+    font.setFamilies([fam, ui_family])
+    return font
+
+
+def has_ppua(text: str) -> bool:
+    return any(PPUA_START <= ord(c) <= PPUA_END for c in text or "")
+
+
+# Live registry: widgets/views that must follow the CURRENT font build
+
+_TRACKED_WIDGETS: List[Tuple["weakref.ref", int]] = []
+_TRACKED_VIEWS: List["weakref.ref"] = []
+
+
+def _refresh_tracked() -> None:
+    alive = []
+    for ref, size in _TRACKED_WIDGETS:
+        w = ref()
+        if w is None:
+            continue
+        try:
+            w.setFont(conlang_font(point_size=size))
+            alive.append((ref, size))
+        except RuntimeError:        # underlying C++ object already deleted
+            pass
+    _TRACKED_WIDGETS[:] = alive
+
+    alive_views = []
+    for ref in _TRACKED_VIEWS:
+        v = ref()
+        if v is None:
+            continue
+        try:
+            v.viewport().update()
+            alive_views.append(ref)
+        except RuntimeError:
+            pass
+    _TRACKED_VIEWS[:] = alive_views
+
+
+def track_conlang_widget(widget, point_size: int = 12) -> None:
+    """Give a field the conlang font AND keep it current across font rebuilds."""
+    widget.setFont(conlang_font(point_size=point_size))
+    for i, (ref, _) in enumerate(_TRACKED_WIDGETS):
+        if ref() is widget:
+            _TRACKED_WIDGETS[i] = (ref, point_size)
+            return
+    _TRACKED_WIDGETS.append((weakref.ref(widget), point_size))
 
 
 def apply_conlang_font(widget, data_dir: str, point_size: int = 11) -> None:
-    fam = register_language_font(data_dir) or FONT_FAMILY
-    if fam:
-        widget.setFont(QFont(fam, point_size))
+    if data_dir:
+        register_language_font(data_dir)
+    track_conlang_widget(widget, point_size)
+
+
+def apply_conlang_to_fields(root, point_size: int = 12) -> None:
+    """Apply the conlang font to every text input under `root` (dialog or page)."""
+    for cls in (QLineEdit, QTextEdit, QPlainTextEdit):
+        for w in root.findChildren(cls):
+            if isinstance(w.parentWidget(), QAbstractSpinBox):
+                continue
+            track_conlang_widget(w, point_size)
+
+
+class ConlangItemDelegate(QStyledItemDelegate):
+    """Chooses the font PER CELL from its text, at paint time.
+
+    Item-level setFont() was fragile: it only ran for some columns, was lost on
+    re-population, and kept the family name from whenever the page was built.
+    The delegate always reads the current family and works for every column,
+    row and refresh, in tables and lists alike.
+    """
+
+    def __init__(self, parent=None, point_size: int = 16):
+        super().__init__(parent)
+        self._point_size = point_size
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        if has_ppua(option.text):
+            f = conlang_font(point_size=self._point_size)
+            f.setBold(option.font.bold())
+            option.font = f
+
+
+def install_conlang_delegate(view, point_size: int = 16) -> None:
+    """Install on a QTableWidget / QTableView / QListWidget."""
+    view.setItemDelegate(ConlangItemDelegate(view, point_size))
+    _TRACKED_VIEWS.append(weakref.ref(view))

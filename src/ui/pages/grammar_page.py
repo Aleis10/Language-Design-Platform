@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QGridLayout, QSpinBox,
 )
 from PySide6.QtCore import Qt
+from digital_keyboard import apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget
 
 try:
     from database.grammar_db import GrammarRepository
@@ -76,6 +77,7 @@ class _RuleDialog(QDialog):
                 idx_cat = self.input_category.findData(cat_id)
                 if idx_cat >= 0:
                     self.input_category.setCurrentIndex(idx_cat)
+        apply_conlang_to_fields(self, 12)
 
     def _validate(self):
         if not self.input_name.text().strip():
@@ -125,6 +127,7 @@ class _CategoryDialog(QDialog):
         if data:
             self.input_name.setText(data.get("name", ""))
             self.input_desc.setText(data.get("description", ""))
+        apply_conlang_to_fields(self, 12)
 
     def _validate(self):
         if not self.input_name.text().strip():
@@ -179,6 +182,7 @@ class _ParadigmDialog(QDialog):
         layout.addWidget(lbl_hint)
 
         self.table = QTableWidget()
+        install_conlang_delegate(self.table, 16)
         self.table.setObjectName("GrammarParadigmTable")
         self.table.setAlternatingRowColors(True)
         layout.addWidget(self.table, stretch=1)
@@ -213,6 +217,7 @@ class _ParadigmDialog(QDialog):
                         self.table.setItem(ri + 1, ci, QTableWidgetItem(str(cell)))
         else:
             self._rebuild_preview()
+        apply_conlang_to_fields(self, 12)
 
     def _rebuild_preview(self):
         cols = self.spin_cols.value()
@@ -301,6 +306,7 @@ class _TemplateDialog(QDialog):
             self.input_gloss.setText(data.get("gloss", ""))
             self.input_translation.setText(data.get("translation", ""))
             self.input_notes.setPlainText(data.get("notes", ""))
+        apply_conlang_to_fields(self, 12)
 
     def _validate(self):
         if not self.input_name.text().strip():
@@ -332,6 +338,7 @@ class GrammarPage(QWidget):
         self.refresh_rules()
         self.refresh_paradigms()
         self.refresh_templates()
+        apply_conlang_to_fields(self, 12)
 
     def _load_stylesheet(self):
         style_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "grammar_page.qss")
@@ -449,6 +456,7 @@ class GrammarPage(QWidget):
         body_layout.addWidget(self.categories_scroll, stretch=1)
 
         self.rules_table = QTableWidget()
+        install_conlang_delegate(self.rules_table, 16)
         self.rules_table.setObjectName("GrammarRulesTable")
         self.rules_table.setColumnCount(7)
         self.rules_table.setHorizontalHeaderLabels([
@@ -571,6 +579,7 @@ class GrammarPage(QWidget):
         body_layout.addWidget(hint)
 
         self.templates_table = QTableWidget()
+        install_conlang_delegate(self.templates_table, 16)
         self.templates_table.setObjectName("GrammarTemplatesTable")
         self.templates_table.setColumnCount(6)
         self.templates_table.setHorizontalHeaderLabels([
@@ -621,13 +630,6 @@ class GrammarPage(QWidget):
             self.rules_table.setItem(ri, 0, QTableWidgetItem(rule.get("name", "")))
             affix_item = QTableWidgetItem(rule.get("affix_pattern", ""))
             gloss_item = QTableWidgetItem(rule.get("gloss_tag", ""))
-            try:
-                from digital_keyboard import conlang_font
-                for it in (affix_item, gloss_item):
-                    if any(ord(c) >= 0xE000 for c in it.text()):
-                        it.setFont(conlang_font(point_size=18))
-            except Exception:
-                pass
             self.rules_table.setItem(ri, 1, affix_item)
             self.rules_table.setItem(ri, 2, QTableWidgetItem(rule.get("affix_type", "")))
             self.rules_table.setItem(ri, 3, gloss_item)
@@ -729,6 +731,7 @@ class GrammarPage(QWidget):
             rows = grid.get("rows", [])
             if headers:
                 tbl = QTableWidget(len(rows) + 1, len(headers))
+                install_conlang_delegate(tbl, 16)
                 tbl.setObjectName("GrammarParadigmTable")
                 tbl.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
                 tbl.verticalHeader().setVisible(False)
@@ -755,13 +758,6 @@ class GrammarPage(QWidget):
             t_item = QTableWidgetItem(tpl.get("pattern", ""))
             g_item = QTableWidgetItem(tpl.get("gloss", ""))
             translation_item = QTableWidgetItem(tpl.get("translation", ""))
-            try:
-                from digital_keyboard import conlang_font
-                for it in (t_item, g_item, translation_item):
-                    if any(ord(c) >= 0xE000 for c in it.text()):
-                        it.setFont(conlang_font(point_size=18))
-            except Exception:
-                pass
             tbl = self.templates_table
             tbl.setItem(ri, 1, t_item)
             tbl.setItem(ri, 2, g_item)

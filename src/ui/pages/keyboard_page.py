@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QPainter
+from digital_keyboard import apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget
 from PySide6.QtSvg import QSvgRenderer
 
 try:
@@ -81,6 +82,7 @@ class _AssignDialog(QDialog):
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         form.addRow(btns)
+        apply_conlang_to_fields(self, 12)
 
     def get_data(self):
         return {
@@ -103,6 +105,7 @@ class _PresetDialog(QDialog):
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         form.addRow(btns)
+        apply_conlang_to_fields(self, 12)
 
     def get_name(self):
         return self.input_name.text().strip()
@@ -122,6 +125,7 @@ class KeyboardPage(QWidget):
         self._build_ui()
         self.load_presets()
         self._load_font_mapping()
+        apply_conlang_to_fields(self, 12)
 
     def _load_font_mapping(self):
         self._font_mapping = {}
@@ -129,7 +133,10 @@ class KeyboardPage(QWidget):
             return
         try:
             self._font_mapping = load_font_mapping(self.data_dir)
-        except Exception:
+            if not self._font_mapping:
+                print(f"[DEBUG-kbd1] No font mapping found in {self.data_dir}/fonts/")
+        except Exception as exc:
+            print(f"[DEBUG-kbd1] Font mapping load failed: {exc}")
             self._font_mapping = {}
 
     def _load_stylesheet(self):
@@ -358,10 +365,39 @@ class KeyboardPage(QWidget):
                 return
             from digital_keyboard import export_language_font, get_fonts_dir, register_language_font
             fonts_dir = get_fonts_dir(self.data_dir) if self.data_dir else self.data_dir
+            
+            # Export font
             result = export_language_font(glyph_rows, fonts_dir)
-            register_language_font(self.data_dir)
+            print(f"[DEBUG-kbd3] Font exported: {result.ttf_path}")
+            
+            # Verify TTF was created
+            if not os.path.exists(result.ttf_path):
+                raise FileNotFoundError(f"Font file not created: {result.ttf_path}")
+            
+            # Verify mapping was created
+            if not os.path.exists(result.mapping_path):
+                raise FileNotFoundError(f"Mapping file not created: {result.mapping_path}")
+            
+            # Register font with Qt
+            registered = register_language_font(self.data_dir)
+            if not registered:
+                print(f"[DEBUG-kbd3] Font registration failed for {result.ttf_path}")
+                QMessageBox.warning(
+                    self, "Font Registration Failed",
+                    f"Font file created but Qt couldn't register it.\n"
+                    f"Glyphs may not display correctly.\n\n"
+                    f"Path: {result.ttf_path}"
+                )
+            else:
+                print(f"[DEBUG-kbd3] Font registered: {registered}")
+            
+            # Reload mapping
             self._load_font_mapping()
+            if not self._font_mapping:
+                raise RuntimeError("Font mapping is empty after rebuild")
 
+            # Update DB with PPUA codes
+            updated_count = 0
             for m in self.keyboard_repo.get_all_mappings(self._current_preset_id):
                 gid = m.get("glyph_id")
                 if gid and gid in self._font_mapping:
@@ -375,16 +411,22 @@ class KeyboardPage(QWidget):
                         glyph_id=gid,
                         key_label=m["key_code"],
                     )
+                    updated_count += 1
 
             QMessageBox.information(
                 self,
                 "Layout Saved",
-                "Keyboard layout saved\n"
-                "Click the button on the bottom right to activate Digital Keyboard"
+                f"✓ Font rebuilt: {result.num_glyphs} glyphs\n"
+                f"✓ Mappings updated: {updated_count} keys\n"
+                f"✓ Font registered: {registered or result.family_name}\n\n"
+                f"Click the button on the bottom right to activate Digital Keyboard"
             )
             if callable(self.on_saved):
                 self.on_saved()
         except Exception as exc:
+            import traceback
+            print(f"[DEBUG-kbd3] Rebuild failed: {exc}")
+            print(traceback.format_exc())
             QMessageBox.critical(self, "Rebuild Failed", f"Could not rebuild font:\n{exc}")
         self.refresh()
 

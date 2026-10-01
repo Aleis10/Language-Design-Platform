@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QFont
-from digital_keyboard import conlang_font
+from digital_keyboard import track_conlang_widget, apply_conlang_to_fields, install_conlang_delegate
 from PySide6.QtGui import QIcon
 
 class Overview_Page(QWidget):
@@ -125,11 +125,6 @@ class Overview_Page(QWidget):
         details_layout.addLayout(grid_layout)
         self.cards_layout.addWidget(details_card)
 
-        # Apply default conlang font to all inputs
-        default_font = conlang_font(point_size=12)
-        for widget in [self.input_exonym, self.input_endonym, self.input_code, self.input_demonym, self.input_pop, self.input_family]:
-            widget.setFont(default_font)
-
         history_card = QFrame()
         history_card.setProperty("class", "overview-card")
         h_layout = QVBoxLayout(history_card)
@@ -154,10 +149,9 @@ class Overview_Page(QWidget):
         c_layout.addWidget(self.text_culture)
         self.cards_layout.addWidget(culture_card)
 
-        # Apply default conlang font to all inputs and text areas
-        text_font = conlang_font(point_size=12)
+        # Conlang font on every input / text area, kept current across font rebuilds
         for widget in [self.input_exonym, self.input_endonym, self.input_code, self.input_demonym, self.input_pop, self.input_family, self.text_history, self.text_culture]:
-            widget.setFont(text_font)
+            track_conlang_widget(widget, 12)
 
         scroll_area.setWidget(self.content_widget)
         main_layout.addWidget(scroll_area, stretch=1)
@@ -301,6 +295,7 @@ class Custom_Section_Dialog(QDialog):
         btn_layout.addWidget(self.btn_cancel)
         btn_layout.addWidget(self.btn_ok)
         layout.addLayout(btn_layout)
+        apply_conlang_to_fields(self, 12)
 
     def get_data(self):
         return self.title_input.text().strip(), self.type_combo.currentIndex()
@@ -393,6 +388,7 @@ class Custom_Card(QFrame):
             content_layout.addWidget(self.list_widget)
 
         self.main_layout.addWidget(self.content_widget)
+        apply_conlang_to_fields(self, 12)
 
     def get_content_str(self) -> str:
         if self.card_type_idx == 0:
@@ -452,6 +448,7 @@ class AutoResizingTextEdit(QTextEdit):
         self.setMaximumHeight(200)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.textChanged.connect(self.adjust_height)
+        track_conlang_widget(self, 12)
 
     def adjust_height(self):
         doc_height = int(self.document().size().height())
@@ -464,6 +461,7 @@ class AutoResizingList(QListWidget):
         super().__init__()
         self.setMinimumHeight(40)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        install_conlang_delegate(self, 14)
 
     def update_height(self):
         if self.count() == 0:

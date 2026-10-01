@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt, QEvent, QObject, Signal, QTimer
 from .components.coll_sidebar import Sidebar
 from .components.dark_file_dialog import open_dark_dialog
 from .components.floating_keyboard import FloatingKeyboardButton
-from .components.on_screen_keyboard import OnScreenKeyboard
+from .components.on_screen_keyboard import OnScreenKeyboard, insert_into_widget
 from .pages.overview import Overview_Page
 from .pages.glyphs_page import Glyphs_Page
 from .pages.lexicon_page import LexiconPage
@@ -31,64 +31,7 @@ except (ImportError, ValueError):
     from ..database.grammar_db import GrammarRepository
     from ..database.archive_manager import ProjectArchiveManager
 
-class _ConlangFontFilter(QObject):
 
-    def __init__(self, data_dir: str = "", parent=None):
-        super().__init__(parent)
-        self.data_dir = data_dir
-        self._family = None
-        self._registered = False
-        self._queued = set()
-
-    def refresh_family(self):
-        if self._registered:
-            return self._family
-        self._registered = True
-        self._family = None
-        if not self.data_dir:
-            return None
-        try:
-            from digital_keyboard import register_language_font
-            self._family = register_language_font(self.data_dir)
-        except Exception:
-            self._family = None
-        return self._family
-
-    def eventFilter(self, obj, event):
-        if event.type() in (QEvent.Type.Polish, QEvent.Type.ChildAdded):
-            if isinstance(obj, QApplication):
-                return False
-            self._defer_apply(obj)
-        return super().eventFilter(obj, event)
-
-    def _defer_apply(self, w):
-        if not isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QPushButton, QLabel)):
-            return
-        if id(w) in self._queued:
-            return
-        self._queued.add(id(w))
-        QTimer.singleShot(0, lambda: self._apply_to(w))
-
-    def _apply_to(self, w):
-        if not isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QPushButton, QLabel, QTableWidget, QTableView)):
-            return
-        family = self.refresh_family()
-        if not family:
-            return
-        try:
-            cur = w.font().family()
-            if cur == family:
-                return
-            if isinstance(w, QTableWidget) or isinstance(w, QTableView):
-                for i in range(w.rowCount()):
-                    for j in range(w.columnCount()):
-                        itm = w.item(i, j)
-                        if itm:  # Apply font to item level
-                            itm.setFont(QFont(family, w.font().pointSize() or 12))
-            else:  # Default handling for other widgets
-                w.setFont(QFont(family, w.font().pointSize() or 12))
-        except Exception:
-            pass
 
 class MainWindow(QMainWindow):
     def __init__(
@@ -185,18 +128,12 @@ class MainWindow(QMainWindow):
         self.kbd_button.toggled_on.connect(self._toggle_osk)
         self._install_floating_kbd()
 
-        self.conlang_font_filter = _ConlangFontFilter(data_dir=self.session_dir or "", parent=self)
-        app_instance = QApplication.instance()
-        if app_instance is not None:
-            app_instance.installEventFilter(self.conlang_font_filter)
-        self.conlang_font_filter.refresh_family()
-
-        app_instance = QApplication.instance()
-        if app_instance is not None:
-            app_instance.installEventFilter(self)
         self._reload_conlang_mappings()
         self._osk_shortcut = None
         self._setup_osk_hotkey()
+        
+        # Install event filter for physical keyboard glyph typing
+        QApplication.instance().installEventFilter(self)
 
     def _update_window_title(self):
         title_suffix = f" - {self.project_name}" if self.project_name else ""
@@ -243,6 +180,7 @@ class MainWindow(QMainWindow):
             language_id=self.language_id,
             session_dir=self.session_dir or "",
             parent=self,
+            mappings=getattr(self, '_glyph_mappings', {}),
         )
         self.osk.closed.connect(self._on_osk_closed)
         self.osk.show()
@@ -281,8 +219,26 @@ class MainWindow(QMainWindow):
         mappings: Dict[str, Dict] = {}
         if self.keyboard_repo and self.language_id:
             try:
-                from digital_keyboard import glyph_character
-                for m in self.keyboard_repo.all_mappings_for_language(self.language_id):
+                from digital_keyboard import glyph_character, register_language_font
+                if self.session_dir:
+                    register_language_font(self.session_dir)
+                # Get the active preset from KeyboardPage
+                active_preset = None
+                if hasattr(self, 'keyboard_page') and hasattr(self.keyboard_page, '_current_preset_id'):
+                    active_preset = self.keyboard_page._current_preset_id
+                
+                # Load only the active preset's mappings
+                if active_preset:
+                    rows = self.keyboard_repo.get_all_mappings(active_preset)
+                else:
+                    # Fallback: load the first available preset
+                    presets = self.keyboard_repo.get_presets(self.language_id)
+                    if presets:
+                        rows = self.keyboard_repo.get_all_mappings(presets[0]["id"])
+                    else:
+                        rows = []
+                
+                for m in rows:
                     key_code = m.get("key_code")
                     if not key_code:
                         continue
@@ -291,10 +247,16 @@ class MainWindow(QMainWindow):
                         gchar = glyph_character(self.session_dir, m["glyph_id"])
                         if gchar:
                             char = gchar
+                        else:
+                            print(f"[DEBUG-kbd2] glyph_character returned empty for glyph_id={m['glyph_id']}")
                     mappings[key_code] = {"char": char, "glyph_id": m.get("glyph_id"), "ppua": m.get("ppua") or ""}
-            except Exception:
+            except Exception as exc:
+                print(f"[DEBUG-kbd2] Failed to reload conlang mappings: {exc}")
                 mappings = {}
         self._glyph_mappings = mappings
+        print(f"[DEBUG-kbd2] Reloaded {len(mappings)} key mappings")
+        if getattr(self, 'osk', None) is not None:
+            self.osk.set_mappings(mappings)
 
     def _glyph_for_key(self, key_code: str) -> Optional[str]:
         m = self._glyph_mappings.get(key_code)
@@ -310,12 +272,15 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.KeyPress and self.osk is not None \
-                and not event.isAutoRepeat():
+                and not event.isAutoRepeat() \
+                and not (event.modifiers() & (Qt.KeyboardModifier.ControlModifier
+                                              | Qt.KeyboardModifier.AltModifier
+                                              | Qt.KeyboardModifier.MetaModifier)):
             key_code = self._qkey_to_key_code(event)
             if key_code:
                 glyph = self._glyph_for_key(key_code)
                 if glyph:
-                    if self.osk is not None:
+                    if self.osk is not None and hasattr(self.osk, 'highlight_key'):
                         self.osk.highlight_key(key_code)
                     self._insert_into_focus(glyph)
                     return True  # swallow the original key
@@ -334,24 +299,7 @@ class MainWindow(QMainWindow):
         return None
 
     def _insert_into_focus(self, text: str):
-        w = QApplication.focusWidget()
-        if w is None:
-            return
-        for meth in ("insert", "insertPlainText"):
-            fn = getattr(w, meth, None)
-            if callable(fn):
-                try:
-                    fn(text)
-                    return
-                except Exception:
-                    pass
-        setter = getattr(w, "setText", None)
-        getter = getattr(w, "text", None)
-        if callable(setter) and callable(getter):
-            try:
-                setter(str(getter()) + text)
-            except Exception:
-                pass
+        insert_into_widget(QApplication.focusWidget(), text)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

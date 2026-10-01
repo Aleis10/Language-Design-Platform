@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QFont
+from digital_keyboard import apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget
 from PySide6.QtSvg import QSvgRenderer
 
 try:
@@ -63,6 +64,7 @@ class AddGroupDialog(QDialog):
         btn_box.addWidget(btn_cancel)
         btn_box.addWidget(btn_save)
         layout.addLayout(btn_box)
+        apply_conlang_to_fields(self, 12)
 
     def _validate_and_accept(self):
         if not self.input_name.text().strip():
@@ -110,6 +112,7 @@ class Glyphs_Page(QWidget):
 
         self.stack.setCurrentIndex(0)
         self.refresh_gallery()
+        apply_conlang_to_fields(self, 12)
 
     def _load_stylesheet(self):
         style_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "glyphs_page.qss")

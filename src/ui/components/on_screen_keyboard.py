@@ -1,73 +1,190 @@
+from typing import Optional, Dict, Any
 
-import os
 from PySide6.QtWidgets import (
-    QWidget, QGridLayout, QPushButton, QLabel, QToolButton,
-    QVBoxLayout, QHBoxLayout,
+    QApplication, QWidget, QGridLayout, QPushButton, QLabel, QToolButton,
+    QVBoxLayout, QHBoxLayout, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox,
 )
-from PySide6.QtCore import Qt, QSize, Signal
-from PySide6.QtGui import QFont, QIcon, QPixmap
+from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtGui import QFont
 
-try:
-    from database.keyboard_db import KeyboardRepository
-    from digital_keyboard import glyph_character, conlang_font
-except (ImportError, ValueError):
-    from ..database.keyboard_db import KeyboardRepository
-    from ...digital_keyboard import glyph_character, conlang_font
+from digital_keyboard import (
+    glyph_character, register_language_font, has_ppua, track_conlang_widget,
+)
+
 
 QWERTY_ROWS = [
     ["`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="],
     ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"],
-    ["a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "BS"],
-    ["z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "Tab"],
-    ["Space"],
+    ["a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'"],
+    ["z", "x", "c", "v", "b", "n", "m", ",", ".", "/"],
+    [" "],
 ]
-FILTER_KEYS = {"BS": ("⌫ Backspace", 2, "Backspace"), "Tab": ("⇥ Tab", 2, "Tab"), "Space": ("Space", 8, "Space")}
 
-KEY_CODES = {k for row in QWERTY_ROWS for k in row}
+_TEXT_WIDGETS = (QLineEdit, QTextEdit, QPlainTextEdit)
 
-def _render_glyph_icon(svg_data: str, size: int = 24):
-    if not svg_data or not svg_data.strip():
+
+# --------------------------------------------------------------------------
+# Shared helpers (also used by MainWindow for physical-keyboard typing)
+# --------------------------------------------------------------------------
+
+def resolve_text_target(w: Optional[QWidget]) -> Optional[QWidget]:
+    """Map a focus widget to the widget that really holds text."""
+    if w is None:
         return None
-    try:
-        from PySide6.QtSvg import QSvgRenderer
-        from PySide6.QtGui import QPainter
-        from PySide6.QtCore import Qt as _Qt
-        renderer = QSvgRenderer(svg_data.encode("utf-8"))
-        pm = QPixmap(size, size)
-        pm.fill(_Qt.GlobalColor.transparent)
-        painter = QPainter(pm)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        renderer.render(painter)
-        painter.end()
-        return QIcon(pm)
-    except Exception:
-        return None
+    if isinstance(w, QComboBox) and w.isEditable():
+        return w.lineEdit()
+    if isinstance(w, _TEXT_WIDGETS) and not getattr(w, "isReadOnly", lambda: False)():
+        return w
+    return None
+
+
+def insert_into_widget(w: QWidget, text: str) -> bool:
+    target = resolve_text_target(w)
+    if target is None or not text:
+        return False
+    if isinstance(target, QLineEdit):
+        target.insert(text)                      # replaces selection, moves caret
+    else:                                        # QTextEdit / QPlainTextEdit
+        target.textCursor().insertText(text)
+        target.ensureCursorVisible()
+    return True
+
+
+def backspace_in_widget(w: QWidget) -> bool:
+    target = resolve_text_target(w)
+    if target is None:
+        return False
+    if isinstance(target, QLineEdit):
+        target.backspace()
+    else:
+        cur = target.textCursor()
+        if cur.hasSelection():
+            cur.removeSelectedText()
+        else:
+            cur.deletePreviousChar()
+    return True
+
 
 class OnScreenKeyboard(QWidget):
+    """On-screen keyboard that inserts mapped characters/glyphs."""
 
     closed = Signal()
 
-    def __init__(self, keyboard_repo, language_id: str, session_dir: str = "", parent=None):
+    def __init__(
+        self,
+        keyboard_repo=None,
+        language_id="",
+        session_dir="",
+        parent=None,
+        mappings: Optional[Dict[str, Dict[str, Any]]] = None,
+    ):
         super().__init__(parent)
+
         self.keyboard_repo = keyboard_repo
         self.language_id = language_id
         self.session_dir = session_dir
-        self._key_buttons = {}
-        self._mappings = {}
-        self._conlang_family = None
+        self._mappings: Dict[str, Dict[str, Any]] = dict(mappings or {})
+        self._key_buttons: Dict[str, QPushButton] = {}
+        self._last_target: Optional[QWidget] = None   # last text field the user was in
 
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
-        self.setWindowTitle("Digital Keyboard")
+        self.setWindowTitle("On-Screen Keyboard")
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
+        # Make sure the CURRENT font build is registered before any button uses it.
+        if self.session_dir:
+            try:
+                register_language_font(self.session_dir)
+            except Exception as exc:
+                print(f"[OSK] font registration failed: {exc}")
+
+        if not self._mappings and self.keyboard_repo and self.language_id:
+            self._load_mappings()
+
         self._build_ui()
-        self.reload_mappings()
+
+        # Clicking a tool window can steal focus; remember the field we came from.
+        app = QApplication.instance()
+        if app is not None:
+            app.focusChanged.connect(self._on_focus_changed)
+            self._on_focus_changed(None, QApplication.focusWidget())
+
+    # ---- lifecycle -------------------------------------------------------
 
     def closeEvent(self, event):
+        app = QApplication.instance()
+        if app is not None:
+            try:
+                app.focusChanged.disconnect(self._on_focus_changed)
+            except (TypeError, RuntimeError):
+                pass
         self.closed.emit()
         super().closeEvent(event)
+
+    def _on_focus_changed(self, _old, new):
+        if new is None or self.isAncestorOf(new) or new is self:
+            return
+        if resolve_text_target(new) is not None:
+            self._last_target = resolve_text_target(new)
+
+    # ---- mappings --------------------------------------------------------
+
+    def _load_mappings(self):
+        """Fallback loader (used only if MainWindow did not pass mappings)."""
+        self._mappings = {}
+        try:
+            presets = self.keyboard_repo.get_presets(self.language_id)
+            rows = self.keyboard_repo.get_all_mappings(presets[0]["id"]) if presets else []
+        except Exception as exc:
+            print(f"[OSK] failed to load mappings: {exc}")
+            return
+        for m in rows:
+            key_code = m.get("key_code")
+            if not key_code:
+                continue
+            char = m.get("assignment") or ""
+            if m.get("glyph_id") and self.session_dir:
+                gchar = glyph_character(self.session_dir, str(m["glyph_id"]))
+                if gchar:
+                    char = gchar
+            self._mappings[key_code] = {
+                "char": char, "glyph_id": m.get("glyph_id"), "ppua": m.get("ppua") or "",
+            }
+
+    def set_mappings(self, mappings: Dict[str, Dict[str, Any]]):
+        """Call when the keyboard preset / font changes; refreshes every key."""
+        self._mappings = dict(mappings or {})
+        if self.session_dir:
+            try:
+                register_language_font(self.session_dir)
+            except Exception:
+                pass
+        for key, btn in self._key_buttons.items():
+            if key != "Backspace":
+                self._style_key(btn, key)
+
+    # ---- UI --------------------------------------------------------------
+
+    def _get_key_text(self, key: str) -> tuple[str, str]:
+        mapping = self._mappings.get(key)
+        char = (mapping or {}).get("char", "")
+        if char:
+            return char, char
+        return key, key
+
+    def _style_key(self, btn: QPushButton, key: str):
+        """Set text, insert payload and the right font for one key."""
+        display, insert = self._get_key_text(key)
+        btn.setText("Space" if key == " " and display == " " else display)
+        btn.setProperty("insert_text", insert)
+        if has_ppua(insert):
+            track_conlang_widget(btn, 16)   # conlang first, UI fallback; follows font rebuilds
+        else:
+            f = QFont(self.font())
+            f.setPointSize(10)
+            btn.setFont(f)
 
     def _build_ui(self):
         self.setObjectName("OSKRoot")
@@ -77,7 +194,7 @@ class OnScreenKeyboard(QWidget):
 
         header = QHBoxLayout()
         header.setSpacing(8)
-        lbl = QLabel("Digital Keyboard")
+        lbl = QLabel("On-Screen Keyboard")
         lbl.setObjectName("OSKTitle")
         header.addWidget(lbl)
         header.addStretch()
@@ -89,39 +206,72 @@ class OnScreenKeyboard(QWidget):
         header.addWidget(btn_close)
         root.addLayout(header)
 
-        hint = QLabel("Assign keys in Keyboard → Layout Mapper. Types into the focused field.")
+        hint = QLabel("Click to insert mapped characters into focused field.")
         hint.setObjectName("OSKHint")
         hint.setWordWrap(True)
         root.addWidget(hint)
 
         grid = QGridLayout()
-        grid.setSpacing(5)
+        grid.setSpacing(4)
         grid.setContentsMargins(0, 0, 0, 0)
 
         row = 0
         for keys in QWERTY_ROWS:
-            col = 0
-            for key in keys:
-                display, span, obj_name = FILTER_KEYS.get(key, (key, 1, "KeyCap"))
-                btn = QPushButton(display)
-                btn.setObjectName(obj_name)
+            for col, key in enumerate(keys):
+                btn = QPushButton()
+                btn.setObjectName(f"Key_{key}")
                 btn.setMinimumHeight(34)
+                btn.setMinimumWidth(40)
                 btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-                if obj_name == "Backspace":
-                    btn.setToolTip("Backspace")
-                elif obj_name == "Tab":
-                    btn.setToolTip("Tab")
-                elif obj_name == "Space":
-                    btn.setToolTip("Space")
-                btn.clicked.connect(self._on_key)
-                grid.addWidget(btn, row, col, 1, span)
+                btn.clicked.connect(lambda _checked=False, b=btn: self._insert_from_button(b))
+                self._style_key(btn, key)
+                if key == " ":
+                    grid.addWidget(btn, row, 0, 1, 8)
+                else:
+                    grid.addWidget(btn, row, col)
                 self._key_buttons[key] = btn
-                col += span
             row += 1
-        grid.setColumnStretch(6, 1)  # keep layout left-aligned
-        root.addLayout(grid)
 
+        backspace_btn = QPushButton("⌫ Backspace")
+        backspace_btn.setObjectName("Key_Backspace")
+        backspace_btn.setMinimumHeight(34)
+        backspace_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        backspace_btn.clicked.connect(self._backspace)
+        grid.addWidget(backspace_btn, row, 0, 1, 4)
+        self._key_buttons["Backspace"] = backspace_btn
+
+        root.addLayout(grid)
         self.setStyleSheet(self._qss())
+
+    def highlight_key(self, key_code: str):
+        btn = self._key_buttons.get(key_code)
+        if btn:
+            btn.setStyleSheet("background: #007acc; color: white;")
+            QTimer.singleShot(150, lambda: btn.setStyleSheet(""))
+
+    # ---- typing ----------------------------------------------------------
+
+    def _target(self) -> Optional[QWidget]:
+        return resolve_text_target(QApplication.focusWidget()) or self._last_target
+
+    def _insert_from_button(self, button: QPushButton):
+        text = button.property("insert_text")
+        if text is None:
+            text = button.text()
+        target = self._target()
+        if target is not None:
+            insert_into_widget(target, str(text))
+            target.setFocus()
+
+    def _backspace(self):
+        target = self._target()
+        if target is not None:
+            backspace_in_widget(target)
+            target.setFocus()
+
+    # ---- style -----------------------------------------------------------
+    # NOTE: no `font-size` / `font-family` on QPushButton here. A stylesheet
+    # font property overrides setFont() and would undo the conlang font.
 
     def _qss(self) -> str:
         return """
@@ -130,267 +280,19 @@ class OnScreenKeyboard(QWidget):
             border: 1px solid #c8c8c8;
             border-radius: 10px;
         }
-        QLabel#OSKTitle {
-            font-size: 13px;
-            font-weight: bold;
-            color: #111111;
-        }
-        QLabel#OSKHint {
-            font-size: 10px;
-            color: #888888;
-        }
-        QPushButton#KeyCap {
+        QLabel#OSKTitle { font-size: 13px; font-weight: bold; color: #111111; }
+        QLabel#OSKHint { font-size: 10px; color: #888888; }
+        QPushButton {
             background: #ffffff;
             border: 1px solid #c8c8c8;
             border-radius: 5px;
-            font-size: 12px;
             color: #333333;
             padding: 2px;
         }
-        QPushButton#KeyCap:hover {
-            background: #eef4fd;
-            border-color: #007acc;
-        }
-        QPushButton#Backspace, QPushButton#Tab {
-            background: #ececec;
-            border: 1px solid #d0d0d0;
-            border-radius: 5px;
-            font-size: 11px;
-            color: #666666;
-        }
-        QPushButton#Space {
-            background: #ffffff;
-            border: 1px solid #c8c8c8;
-            border-radius: 5px;
-            font-size: 11px;
-            color: #999999;
-        }
-        QPushButton#Space:hover {
-            background: #eef4fd;
-        }
+        QPushButton:hover { background: #eef4fd; border-color: #007acc; }
         QToolButton#OSKClose {
-            border: none;
-            background: transparent;
-            color: #666666;
-            font-size: 14px;
-            font-weight: bold;
+            border: none; background: transparent; color: #666666;
+            font-size: 14px; font-weight: bold;
         }
-        QToolButton#OSKClose:hover {
-            color: #c0392b;
-        }
+        QToolButton#OSKClose:hover { color: #c0392b; }
         """
-
-    def reload_mappings(self):
-        self._mappings = {}
-        try:
-            rows = self.keyboard_repo.all_mappings_for_language(self.language_id)
-        except Exception:
-            rows = []
-        for m in rows:
-            key_code = m.get("key_code")
-            if not key_code:
-                continue
-            char = m.get("assignment") or ""
-            if m.get("glyph_id") and self.session_dir:
-                gchar = glyph_character(self.session_dir, m["glyph_id"])
-                if gchar:
-                    char = gchar
-            self._mappings[key_code] = {
-                "char": char,
-                "glyph_id": m.get("glyph_id"),
-                "ppua": m.get("ppua") or "",
-            }
-        self._paint_keys()
-
-    def _paint_keys(self):
-        for key, btn in self._key_buttons.items():
-            if key not in KEY_CODES:
-                continue
-            m = self._mappings.get(key)
-            if m and (m["char"] or m["glyph_id"]):
-                if m["glyph_id"] and self.session_dir:
-                    svg = ""
-                    try:
-                        g = self.keyboard_repo.get_glyph(m["glyph_id"])
-                        svg = g.get("svg_data", "") if g else ""
-                    except Exception:
-                        svg = ""
-                    icon = _render_glyph_icon(svg, 22) if svg else None
-                    if icon:
-                        btn.setText("")
-                        btn.setIcon(icon)
-                        btn.setIconSize(QSize(22, 22))
-                        btn.setObjectName("KeyCapGlyph")
-                        btn.setStyleSheet("QPushButton#KeyCapGlyph { background: #e3f0ff; border: 1px solid #4a90d9; border-radius: 5px; }\nQPushButton#KeyCapGlyph:hover { background: #d4e6f1; }")
-                        continue
-                btn.setIcon(QIcon())
-                btn.setText(m["char"] if m["char"] else key)
-                if m["char"] and any(ord(c) >= 0xE000 for c in m["char"]):
-                    btn.setObjectName("KeyCapGlyph")
-                    btn.setStyleSheet("QPushButton#KeyCapGlyph { background: #e3f0ff; border: 1px solid #4a90d9; border-radius: 5px; font-size: 18px; }\nQPushButton#KeyCapGlyph:hover { background: #d4e6f1; }")
-                    try:
-                        btn.setFont(conlang_font(point_size=18))
-                    except Exception:
-                        pass
-                else:
-                    btn.setObjectName("KeyCap")
-                    btn.setStyleSheet("")
-                    btn.setFont(QFont())
-                btn.setToolTip(f"{key} → {m['char'] or 'glyph'}")
-            else:
-                btn.setIcon(QIcon())
-                btn.setText(FILTER_KEYS.get(key, (key, 1, "KeyCap"))[0])
-                btn.setObjectName("KeyCap")
-                btn.setStyleSheet("")
-                btn.setFont(QFont())
-                btn.setToolTip("")
-
-    def _on_key(self):
-        btn = self.sender()
-        if not btn:
-            return
-        key = next((k for k, b in self._key_buttons.items() if b is btn), None)
-        if key is None:
-            return
-        if key == "BS":
-            self._send_key(Qt.Key.Key_Backspace)
-            return
-        if key == "Tab":
-            self._send_key(Qt.Key.Key_Tab)
-            return
-        if key == "Space":
-            self._insert(" ")
-            return
-        m = self._mappings.get(key)
-        if m and m["char"]:
-            self._insert(m["char"])
-        elif m and m["glyph_id"]:
-            self._insert(m.get("ppua") or "")
-
-    def _insert(self, text: str):
-        w = self._focus_widget()
-        if not w:
-            win = self.window() if self.window() != self else None
-            if win is not None:
-                try:
-                    w = win.focusWidget()
-                except Exception:
-                    w = None
-        if not w:
-            return
-        ins = getattr(w, "insert", None)
-        if callable(ins):
-            try:
-                ins(text)
-                return
-            except Exception:
-                pass
-        setter = getattr(w, "setText", None)
-        getter = getattr(w, "text", None)
-        if callable(setter) and callable(getter):
-            try:
-                setter(str(getter()) + text)
-                return
-            except Exception:
-                pass
-        for ch in text:
-            if ch.isascii():
-                try:
-                    self._send_key(Qt.Key.Key_A + (ord(ch.upper()) - ord('A')) if ch.isalpha() else None)
-                except Exception:
-                    pass
-
-    def _focus_widget(self):
-        from PySide6.QtWidgets import QApplication
-        w = QApplication.focusWidget()
-        if w is not None and hasattr(w, "insert") and not isinstance(w, QPushButton) and not isinstance(w, QToolButton):
-            return w
-        if w is not None and hasattr(w, "setText") and not isinstance(w, QPushButton) and not isinstance(w, QToolButton):
-            return w
-        return None
-
-    def _send_key(self, qkey):
-        from PySide6.QtWidgets import QApplication
-        w = QApplication.focusWidget()
-        if not w:
-            return
-        from PySide6.QtGui import QKeyEvent
-        from PySide6.QtCore import QEvent
-        press = QKeyEvent(QEvent.Type.KeyPress, qkey, Qt.KeyboardModifier.NoModifier)
-        release = QKeyEvent(QEvent.Type.KeyRelease, qkey, Qt.KeyboardModifier.NoModifier)
-        try:
-            QApplication.sendEvent(w, press)
-            QApplication.sendEvent(w, release)
-        except Exception:
-            pass
-
-    def highlight_key(self, key_code: str):
-        btn = self._key_buttons.get(key_code)
-        if btn is not None:
-            self._highlight_btn(btn)
-
-    def clear_highlight(self):
-        for btn in self._key_buttons.values():
-            self._unhighlight_btn(btn)
-
-    def _highlight_btn(self, btn):
-        try:
-            btn.setProperty("pressedX", True)
-            btn.setStyleSheet(
-                "QPushButton { background:#cfe8ff; border:2px solid #007acc; border-radius:5px; }"
-            )
-        except Exception:
-            pass
-
-    def _unhighlight_btn(self, btn):
-        try:
-            btn.setProperty("pressedX", False)
-        except Exception:
-            pass
-        self._repaint_key(btn)
-
-    def _repaint_key(self, btn):
-        try:
-            key = next((k for k, b in self._key_buttons.items() if b is btn), None)
-            if key is None:
-                return
-            m = self._mappings.get(key)
-            if m and (m.get("char") or m.get("glyph_id")):
-                self._paint_key_btn(btn, key, m)
-            else:
-                btn.setStyleSheet("")
-                btn.setFont(QFont())
-        except Exception:
-            pass
-
-    def _paint_key_btn(self, btn, key, m):
-        if m.get("glyph_id") and self.session_dir:
-            svg = ""
-            try:
-                g = self.keyboard_repo.get_glyph(m["glyph_id"])
-                svg = g.get("svg_data", "") if g else ""
-            except Exception:
-                svg = ""
-            icon = _render_glyph_icon(svg, 22) if svg else None
-            if icon:
-                btn.setText("")
-                btn.setIcon(icon)
-                btn.setIconSize(QSize(22, 22))
-                btn.setObjectName("KeyCapGlyph")
-                btn.setStyleSheet("QPushButton#KeyCapGlyph { background: #e3f0ff; border: 1px solid #4a90d9; border-radius: 5px; }\nQPushButton#KeyCapGlyph:hover { background: #d4e6f1; }")
-                return
-        btn.setIcon(QIcon())
-        btn.setText(m["char"] if m["char"] else key)
-        if m["char"] and any(ord(c) >= 0xE000 for c in m["char"]):
-            btn.setObjectName("KeyCapGlyph")
-            btn.setStyleSheet("QPushButton#KeyCapGlyph { background: #e3f0ff; border: 1px solid #4a90d9; border-radius: 5px; font-size: 18px; }\nQPushButton#KeyCapGlyph:hover { background: #d4e6f1; }")
-            try:
-                btn.setFont(conlang_font(point_size=18))
-            except Exception:
-                pass
-        else:
-            btn.setObjectName("KeyCap")
-            btn.setStyleSheet("")
-            btn.setFont(QFont())
-            btn.setStyleSheet("")
-            btn.setFont(QFont())

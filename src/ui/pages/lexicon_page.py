@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit, QListWidget, QListWidgetItem, QInputDialog,
 )
 from PySide6.QtCore import Qt
+from digital_keyboard import apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget
 
 try:
     from database.lexicon_db import LexiconRepository
@@ -111,6 +112,19 @@ class _EntryDialog(QDialog):
         btns.accepted.connect(self._validate)
         btns.rejected.connect(self.reject)
         form.addRow(btns)
+
+        # Every text input that can receive OSK / physical-key glyphs gets the conlang
+        # font (UI font as per-character fallback), tracked across font rebuilds.
+        try:
+            from digital_keyboard import (
+                apply_conlang_to_fields, install_conlang_delegate, register_language_font,
+            )
+            if data_dir:
+                register_language_font(data_dir)
+            apply_conlang_to_fields(self, 12)
+            install_conlang_delegate(self.audio_list, 14)
+        except Exception as exc:
+            print(f"[font] lexicon dialog: {exc}")
 
         self.input_ipa.clearFocus()
 
@@ -242,6 +256,10 @@ class LexiconPage(QWidget):
         self._build_ui()
         self._load_stylesheet()
         self.refresh_table()
+        try:
+            apply_conlang_to_fields(self, 12)
+        except Exception as exc:
+            print(f"[font] lexicon page: {exc}")
 
     def _load_stylesheet(self):
         style_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "lexicon_page.qss")
@@ -292,6 +310,10 @@ class LexiconPage(QWidget):
         body_layout.setContentsMargins(20, 16, 20, 16)
         body_layout.setSpacing(12)
         self.table = QTableWidget()
+        try:
+            install_conlang_delegate(self.table, 16)
+        except Exception as exc:
+            print(f"[font] lexicon table: {exc}")
         self.table.setObjectName("LexTable")
         self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels(["Headword", "IPA", "POS", "Meaning", "English", "Audio", "Description", "ID"])
@@ -324,16 +346,6 @@ class LexiconPage(QWidget):
             ipa_item = QTableWidgetItem(entry.get("ipa_reading", ""))
             meaning_item = QTableWidgetItem(entry.get("meaning", ""))
             english_item = QTableWidgetItem(entry.get("english_translation", ""))
-            # Apply the conlang font ONLY to cells that actually contain PUA glyph
-            # characters (U+E000+). Forcing it on plain text makes the font fall
-            # back and render as weird clumped/emoji glyphs.
-            try:
-                from digital_keyboard import conlang_font
-                for it in (hw_item, ipa_item, meaning_item, english_item):
-                    if any(ord(c) >= 0xE000 for c in it.text()):
-                        it.setFont(conlang_font(point_size=18))
-            except Exception:
-                pass
             self.table.setItem(row, 0, hw_item)
             self.table.setItem(row, 1, ipa_item)
             self.table.setItem(row, 2, QTableWidgetItem(entry.get("part_of_speech", "")))
