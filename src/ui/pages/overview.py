@@ -5,7 +5,10 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QFont
-from digital_keyboard import track_conlang_widget, apply_conlang_to_fields, install_conlang_delegate
+from digital_keyboard import (
+    track_conlang_widget, track_conlang_combo, apply_conlang_to_fields,
+    install_conlang_delegate, ConlangLabel,
+)
 from PySide6.QtGui import QIcon
 
 class Overview_Page(QWidget):
@@ -152,6 +155,8 @@ class Overview_Page(QWidget):
         # Conlang font on every input / text area, kept current across font rebuilds
         for widget in [self.input_exonym, self.input_endonym, self.input_code, self.input_demonym, self.input_pop, self.input_family, self.text_history, self.text_culture]:
             track_conlang_widget(widget, 12)
+        for combo in (self.combo_word_order, self.combo_morphology, self.combo_script):
+            track_conlang_combo(combo, 12)
 
         scroll_area.setWidget(self.content_widget)
         main_layout.addWidget(scroll_area, stretch=1)
@@ -316,7 +321,7 @@ class Custom_Card(QFrame):
         self.main_layout.setContentsMargins(16, 12, 16, 12)
 
         header_layout = QHBoxLayout()
-        self.title_label = QLabel(title)
+        self.title_label = ConlangLabel(title)
         self.title_label.setProperty("class", "section-title")
 
         self.btn_rename = QPushButton()

@@ -12,6 +12,7 @@ from PySide6.QtCore import QByteArray, QPointF, Qt
 from PySide6.QtGui import QPainterPath, QPainterPathStroker, QFontDatabase, QFont
 from PySide6.QtWidgets import (
     QStyledItemDelegate, QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox,
+    QComboBox, QLabel,
 )
 
 from fontTools.fontBuilder import FontBuilder
@@ -593,6 +594,7 @@ def has_ppua(text: str) -> bool:
 
 _TRACKED_WIDGETS: List[Tuple["weakref.ref", int]] = []
 _TRACKED_VIEWS: List["weakref.ref"] = []
+_TRACKED_LABELS: List["weakref.ref"] = []
 
 
 def _refresh_tracked() -> None:
@@ -607,6 +609,18 @@ def _refresh_tracked() -> None:
         except RuntimeError:        # underlying C++ object already deleted
             pass
     _TRACKED_WIDGETS[:] = alive
+
+    alive_labels = []
+    for ref in _TRACKED_LABELS:
+        lb = ref()
+        if lb is None:
+            continue
+        try:
+            lb._cl_refresh()
+            alive_labels.append(ref)
+        except RuntimeError:
+            pass
+    _TRACKED_LABELS[:] = alive_labels
 
     alive_views = []
     for ref in _TRACKED_VIEWS:
@@ -637,6 +651,17 @@ def apply_conlang_font(widget, data_dir: str, point_size: int = 11) -> None:
     track_conlang_widget(widget, point_size)
 
 
+def track_conlang_combo(combo: QComboBox, point_size: int = 12) -> None:
+    """Editable (or not) combo whose edit box AND drop-down list use the conlang font."""
+    track_conlang_widget(combo, point_size)
+    if combo.lineEdit() is not None:
+        track_conlang_widget(combo.lineEdit(), point_size)
+    try:
+        track_conlang_widget(combo.view(), point_size)
+    except Exception:
+        pass
+
+
 def apply_conlang_to_fields(root, point_size: int = 12) -> None:
     """Apply the conlang font to every text input under `root` (dialog or page)."""
     for cls in (QLineEdit, QTextEdit, QPlainTextEdit):
@@ -644,6 +669,9 @@ def apply_conlang_to_fields(root, point_size: int = 12) -> None:
             if isinstance(w.parentWidget(), QAbstractSpinBox):
                 continue
             track_conlang_widget(w, point_size)
+    for combo in root.findChildren(QComboBox):
+        if combo.isEditable():
+            track_conlang_combo(combo, point_size)
 
 
 class ConlangItemDelegate(QStyledItemDelegate):
@@ -671,3 +699,41 @@ def install_conlang_delegate(view, point_size: int = 16) -> None:
     """Install on a QTableWidget / QTableView / QListWidget."""
     view.setItemDelegate(ConlangItemDelegate(view, point_size))
     _TRACKED_VIEWS.append(weakref.ref(view))
+
+
+class ConlangLabel(QLabel):
+    """QLabel for DISPLAYING user-entered text (titles, names, descriptions).
+
+    If the text contains conlang glyph characters the label uses the conlang
+    font (UI font as per-character fallback); otherwise it keeps its normal
+    font. Only the font FAMILY is touched, so stylesheet size/weight rules
+    (font-size, font-weight, ...) keep working. Text can change at any time
+    via setText() and the font follows; it also follows font rebuilds.
+    """
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(parent)
+        f = self.font()
+        self._cl_base = list(f.families()) or [f.family()]
+        self._cl_applied = False
+        _TRACKED_LABELS.append(weakref.ref(self))
+        if text:
+            self.setText(text)
+
+    def setText(self, text) -> None:
+        super().setText(text)
+        self._cl_refresh()
+
+    def _cl_refresh(self) -> None:
+        ppua = has_ppua(self.text())
+        if not ppua and not self._cl_applied:
+            return                      # ordinary text: leave the font alone (keeps inheritance)
+        f = self.font()
+        if ppua:
+            fam = active_conlang_family()
+            f.setFamilies([fam] + self._cl_base)
+            self._cl_applied = True
+        else:
+            f.setFamilies(self._cl_base)
+            self._cl_applied = False
+        self.setFont(f)
