@@ -8,7 +8,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QPainter
-from digital_keyboard import apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget
+from digital_keyboard import (
+    apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget, track_conlang_combo,
+)
 from PySide6.QtSvg import QSvgRenderer
 
 try:
@@ -66,6 +68,7 @@ class _AssignDialog(QDialog):
             icon = _render_glyph_icon(g.get("svg_data", ""), 24)
             self.combo_glyph.addItem(icon if icon else QIcon(), label, g.get("id"))
         form.addRow("Glyph for this key:", self.combo_glyph)
+        track_conlang_combo(self.combo_glyph, 12)
 
         hint = QLabel("Only pick a glyph. Clicking this key will type that glyph "
                       "(after Save rebuilds the language font).")
@@ -165,6 +168,7 @@ class KeyboardPage(QWidget):
 
         self.combo_presets = QComboBox()
         self.combo_presets.setMinimumWidth(160)
+        track_conlang_combo(self.combo_presets, 12)
         self.combo_presets.currentIndexChanged.connect(self._on_preset_changed)
         header.addWidget(self.combo_presets)
 

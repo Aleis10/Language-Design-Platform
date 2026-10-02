@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from digital_keyboard import (
     apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget, ConlangLabel,
+    track_conlang_combo,
 )
 
 try:
@@ -54,6 +55,7 @@ class _RuleDialog(QDialog):
         for cat in self.categories:
             self.input_category.addItem(cat["name"], cat["id"])
         form.addRow("Category:", self.input_category)
+        track_conlang_combo(self.input_category, 12)
 
         btns_row = QHBoxLayout()
         btn_cancel = QPushButton("Cancel")
@@ -432,6 +434,7 @@ class GrammarPage(QWidget):
 
         self.combo_category_filter = QComboBox()
         self.combo_category_filter.setMinimumWidth(160)
+        track_conlang_combo(self.combo_category_filter, 12)
         self.combo_category_filter.currentIndexChanged.connect(self._on_category_filter_changed)
         top.addWidget(self.combo_category_filter)
 

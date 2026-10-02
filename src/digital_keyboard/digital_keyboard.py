@@ -12,7 +12,7 @@ from PySide6.QtCore import QByteArray, QEvent, QObject, QPointF, Qt
 from PySide6.QtGui import QPainterPath, QPainterPathStroker, QFontDatabase, QFont
 from PySide6.QtWidgets import (
     QStyledItemDelegate, QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox,
-    QComboBox, QLabel,
+    QComboBox, QLabel, QInputDialog,
 )
 
 from fontTools.fontBuilder import FontBuilder
@@ -740,22 +740,49 @@ def install_conlang_delegate(view, point_size: int = 16) -> None:
     _TRACKED_VIEWS.append(weakref.ref(view))
 
 
-class ConlangLabel(QLabel):
-    """QLabel for DISPLAYING user-entered text (titles, names, descriptions).
+_FONT_FAMILY_DECL = re.compile(r"font-family\s*:[^;}]*;?", re.IGNORECASE)
 
-    If the text contains conlang glyph characters the label uses the conlang
-    font (UI font as per-character fallback); otherwise it keeps its normal
-    font. Only the font FAMILY is touched, so stylesheet size/weight rules
-    (font-size, font-weight, ...) keep working. Text can change at any time
-    via setText() and the font follows; it also follows font rebuilds.
+
+def sync_label_font(label) -> None:
+    """Make `label` use the conlang font if (and only if) its text has glyph characters.
+
+    * touches the font FAMILY only (stylesheet size / weight / colour keep working);
+    * ordinary text is never touched, so the label keeps inheriting its normal font;
+    * a `font-family:` rule in the label's OWN stylesheet beats setFont(), so while
+      glyph text is shown that one declaration is removed (and restored afterwards).
+    Safe to call repeatedly.
+    """
+    ppua = has_ppua(label.text())
+    applied = getattr(label, "_cl_applied", False)
+    if not ppua and not applied:
+        return
+    if not hasattr(label, "_cl_base"):
+        f0 = label.font()
+        label._cl_base = list(f0.families()) or [f0.family()]
+    cur_qss = label.styleSheet()
+    if cur_qss != getattr(label, "_cl_last_qss", None):    # first time, or code set a new sheet
+        label._cl_orig_qss = cur_qss
+    want_qss = _FONT_FAMILY_DECL.sub("", label._cl_orig_qss) if ppua else label._cl_orig_qss
+    f = label.font()
+    f.setFamilies(([active_conlang_family()] + label._cl_base) if ppua else label._cl_base)
+    label._cl_applied = ppua
+    label._cl_last_qss = want_qss
+    if cur_qss != want_qss:
+        label.setStyleSheet(want_qss)
+    label.setFont(f)
+
+
+class ConlangLabel(QLabel):
+    """QLabel for DISPLAYING user-entered text (titles, names, descriptions, readings).
+
+    Uses the conlang font when the text contains glyph characters, otherwise
+    keeps its normal font. Follows setText(), stylesheet resets and font rebuilds.
     """
 
     def __init__(self, text: str = "", parent=None):
         super().__init__(parent)
-        f = self.font()
-        self._cl_base = list(f.families()) or [f.family()]
-        self._cl_applied = False
         self._cl_busy = False
+        self._cl_applied = False
         _TRACKED_LABELS.append(weakref.ref(self))
         if text:
             self.setText(text)
@@ -768,22 +795,40 @@ class ConlangLabel(QLabel):
         super().changeEvent(event)
         if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange,
                             QEvent.Type.ParentChange) and not self._cl_busy:
-            self._cl_busy = True
-            try:
-                self._cl_refresh()
-            finally:
-                self._cl_busy = False
+            self._cl_refresh()
 
     def _cl_refresh(self) -> None:
-        ppua = has_ppua(self.text())
-        if not ppua and not self._cl_applied:
-            return                      # ordinary text: leave the font alone (keeps inheritance)
-        f = self.font()
-        if ppua:
-            fam = active_conlang_family()
-            f.setFamilies([fam] + self._cl_base)
-            self._cl_applied = True
-        else:
-            f.setFamilies(self._cl_base)
-            self._cl_applied = False
-        self.setFont(f)
+        if self._cl_busy:
+            return
+        self._cl_busy = True
+        try:
+            sync_label_font(self)
+        finally:
+            self._cl_busy = False
+
+
+class _AutoFontFilter(QObject):
+    """Safety net for labels created by Qt itself (QMessageBox, QInputDialog, ...).
+
+    Deliberately narrow, unlike the old global filter that restyled every widget:
+    it only reacts when a QLabel is polished/shown AND its text contains glyph
+    characters, and it only changes the font family.
+    """
+
+    def eventFilter(self, obj, event):
+        t = event.type()
+        if t in (QEvent.Type.Polish, QEvent.Type.Show):
+            if isinstance(obj, QLabel) and not isinstance(obj, ConlangLabel):
+                if has_ppua(obj.text()):
+                    sync_label_font(obj)
+            elif t == QEvent.Type.Show and isinstance(obj, QInputDialog):
+                for le in obj.findChildren(QLineEdit):
+                    track_conlang_widget(le, 12)
+        return False
+
+
+def install_conlang_autofont(app) -> None:
+    """Call once after QApplication is created."""
+    flt = _AutoFontFilter(app)
+    app.installEventFilter(flt)
+    app._conlang_autofont_filter = flt

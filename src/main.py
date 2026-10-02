@@ -21,6 +21,8 @@ def load_stylesheet(app: QApplication, filepath: str) -> None:
 
 def main():
     app = QApplication(sys.argv)
+    from digital_keyboard import install_conlang_autofont
+    install_conlang_autofont(app)   # conlang font for glyph text in message boxes / prompts
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     qss_path = os.path.join(base_dir, "ui", "pages", "style", "overview_page.qss")

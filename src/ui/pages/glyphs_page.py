@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QFont
 from digital_keyboard import (
     apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget, ConlangLabel,
+    track_conlang_combo,
 )
 from PySide6.QtSvg import QSvgRenderer
 
@@ -311,7 +312,7 @@ class Glyphs_Page(QWidget):
         badges_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         if glyph.get("ipa_reading"):
-            ipa_lbl = QLabel(f"/{glyph['ipa_reading']}/")
+            ipa_lbl = ConlangLabel(f"/{glyph['ipa_reading']}/")
             ipa_lbl.setStyleSheet("font-family: monospace; font-size: 10px; background: #eef4ff; color: #005999; padding: 1px 5px; border-radius: 3px;")
             badges_row.addWidget(ipa_lbl)
 
@@ -520,6 +521,7 @@ class Glyphs_Page(QWidget):
         
         combo_glyphs = QComboBox()
         combo_glyphs.addItems(glyph_display_names)
+        track_conlang_combo(combo_glyphs, 12)
         layout.addWidget(combo_glyphs)
         
         btn_box = QHBoxLayout()
@@ -908,7 +910,7 @@ class Glyphs_Page(QWidget):
         badges_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         if glyph.get("ipa_reading"):
-            ipa_lbl = QLabel(f"/{glyph['ipa_reading']}/")
+            ipa_lbl = ConlangLabel(f"/{glyph['ipa_reading']}/")
             ipa_lbl.setStyleSheet("font-family: monospace; font-size: 10px; background: #eef4ff; color: #005999; padding: 1px 5px; border-radius: 3px;")
             badges_row.addWidget(ipa_lbl)
 
