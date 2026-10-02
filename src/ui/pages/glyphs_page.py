@@ -9,7 +9,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QFont
-from digital_keyboard import apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget
+from digital_keyboard import (
+    apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget, ConlangLabel,
+)
 from PySide6.QtSvg import QSvgRenderer
 
 try:
@@ -214,7 +216,7 @@ class Glyphs_Page(QWidget):
         title_col.setSpacing(2)
 
         title_row = QHBoxLayout()
-        lbl_name = QLabel(group["name"])
+        lbl_name = ConlangLabel(group["name"])
         lbl_name.setProperty("class", "group-title")
         
         glyphs = self.glyph_repo.get_glyphs_by_group(group["id"])
@@ -226,7 +228,7 @@ class Glyphs_Page(QWidget):
         title_row.addStretch()
 
         desc_text = group.get("description", "")
-        lbl_desc = QLabel(desc_text) if desc_text else None
+        lbl_desc = ConlangLabel(desc_text) if desc_text else None
         if lbl_desc:
             lbl_desc.setProperty("class", "group-desc")
 
@@ -296,11 +298,11 @@ class Glyphs_Page(QWidget):
             lbl_preview.setText("[Empty]")
             lbl_preview.setStyleSheet("color: #aaaaaa; font-size: 11px;")
 
-        lbl_name = QLabel(glyph["name"])
+        lbl_name = ConlangLabel(glyph["name"])
         lbl_name.setStyleSheet("font-weight: bold; font-size: 13px; color: #111111;")
         lbl_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        lbl_meaning = QLabel(glyph.get("meaning", "") or "—")
+        lbl_meaning = ConlangLabel(glyph.get("meaning", "") or "—")
         lbl_meaning.setStyleSheet("font-size: 11px; color: #666666;")
         lbl_meaning.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -377,7 +379,7 @@ class Glyphs_Page(QWidget):
         btn_back.setObjectName("BtnBackGallery")
         btn_back.clicked.connect(self.back_to_gallery)
 
-        self.lbl_breadcrumb = QLabel("Groups > Radicals > Sun")
+        self.lbl_breadcrumb = ConlangLabel("Groups > Radicals > Sun")
         self.lbl_breadcrumb.setStyleSheet("font-size: 14px; font-weight: bold; color: #333333;")
 
         self.btn_export_single_svg = QPushButton("⤓ Export SVG")
@@ -811,7 +813,7 @@ class Glyphs_Page(QWidget):
         title_col.setSpacing(2)
 
         title_row = QHBoxLayout()
-        lbl_name = QLabel(group["name"])
+        lbl_name = ConlangLabel(group["name"])
         lbl_name.setProperty("class", "group-title")
         
         glyphs = self.glyph_repo.get_glyphs_by_group(group["id"])
@@ -823,7 +825,7 @@ class Glyphs_Page(QWidget):
         title_row.addStretch()
 
         desc_text = group.get("description", "")
-        lbl_desc = QLabel(desc_text) if desc_text else None
+        lbl_desc = ConlangLabel(desc_text) if desc_text else None
         if lbl_desc:
             lbl_desc.setProperty("class", "group-desc")
 
@@ -893,11 +895,11 @@ class Glyphs_Page(QWidget):
             lbl_preview.setText("[Empty]")
             lbl_preview.setStyleSheet("color: #aaaaaa; font-size: 11px;")
 
-        lbl_name = QLabel(glyph["name"])
+        lbl_name = ConlangLabel(glyph["name"])
         lbl_name.setStyleSheet("font-weight: bold; font-size: 13px; color: #111111;")
         lbl_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        lbl_meaning = QLabel(glyph.get("meaning", "") or "—")
+        lbl_meaning = ConlangLabel(glyph.get("meaning", "") or "—")
         lbl_meaning.setStyleSheet("font-size: 11px; color: #666666;")
         lbl_meaning.setAlignment(Qt.AlignmentFlag.AlignCenter)
 

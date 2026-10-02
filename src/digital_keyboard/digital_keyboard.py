@@ -8,7 +8,7 @@ import weakref
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
-from PySide6.QtCore import QByteArray, QPointF, Qt
+from PySide6.QtCore import QByteArray, QEvent, QObject, QPointF, Qt
 from PySide6.QtGui import QPainterPath, QPainterPathStroker, QFontDatabase, QFont
 from PySide6.QtWidgets import (
     QStyledItemDelegate, QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox,
@@ -635,9 +635,48 @@ def _refresh_tracked() -> None:
     _TRACKED_VIEWS[:] = alive_views
 
 
+_GUARD_EVENTS = (
+    QEvent.Type.FontChange, QEvent.Type.StyleChange, QEvent.Type.ParentChange,
+    QEvent.Type.Polish, QEvent.Type.Show,
+)
+
+
+class _ConlangFontGuard(QObject):
+    """Re-applies the conlang font whenever Qt/QSS resets it.
+
+    With an application stylesheet loaded, Qt re-resolves widget fonts when a
+    widget is polished or reparented (e.g. `QScrollArea.setWidget(...)`), and for
+    editable QComboBox that silently throws away the font set earlier with
+    setFont(). A one-time setFont() can therefore never be enough; the guard
+    checks on those events and puts the conlang font back.
+    """
+
+    def __init__(self, widget, point_size: int):
+        super().__init__(widget)
+        self.point_size = point_size
+        self._busy = False
+        widget.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if not self._busy and event.type() in _GUARD_EVENTS:
+            want = active_conlang_family()
+            if obj.font().families()[:1] != [want]:
+                self._busy = True
+                try:
+                    obj.setFont(conlang_font(point_size=self.point_size))
+                finally:
+                    self._busy = False
+        return False
+
+
 def track_conlang_widget(widget, point_size: int = 12) -> None:
-    """Give a field the conlang font AND keep it current across font rebuilds."""
+    """Give a field the conlang font AND keep it: across font rebuilds and QSS resets."""
     widget.setFont(conlang_font(point_size=point_size))
+    guard = widget.findChild(_ConlangFontGuard, "", Qt.FindChildOption.FindDirectChildrenOnly)
+    if guard is None:
+        _ConlangFontGuard(widget, point_size)
+    else:
+        guard.point_size = point_size
     for i, (ref, _) in enumerate(_TRACKED_WIDGETS):
         if ref() is widget:
             _TRACKED_WIDGETS[i] = (ref, point_size)
@@ -716,6 +755,7 @@ class ConlangLabel(QLabel):
         f = self.font()
         self._cl_base = list(f.families()) or [f.family()]
         self._cl_applied = False
+        self._cl_busy = False
         _TRACKED_LABELS.append(weakref.ref(self))
         if text:
             self.setText(text)
@@ -723,6 +763,16 @@ class ConlangLabel(QLabel):
     def setText(self, text) -> None:
         super().setText(text)
         self._cl_refresh()
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange,
+                            QEvent.Type.ParentChange) and not self._cl_busy:
+            self._cl_busy = True
+            try:
+                self._cl_refresh()
+            finally:
+                self._cl_busy = False
 
     def _cl_refresh(self) -> None:
         ppua = has_ppua(self.text())

@@ -9,7 +9,9 @@ from PySide6.QtWidgets import (
     QGridLayout, QSpinBox,
 )
 from PySide6.QtCore import Qt
-from digital_keyboard import apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget
+from digital_keyboard import (
+    apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget, ConlangLabel,
+)
 
 try:
     from database.grammar_db import GrammarRepository
@@ -666,12 +668,12 @@ class GrammarPage(QWidget):
             count_badge.setObjectName("GrammarCatBadge")
             card_layout.addWidget(count_badge)
 
-            name_lbl = QLabel(cat["name"])
+            name_lbl = ConlangLabel(cat["name"])
             name_lbl.setObjectName("GrammarCatName")
             card_layout.addWidget(name_lbl)
 
             if cat.get("description"):
-                desc_lbl = QLabel(cat["description"])
+                desc_lbl = ConlangLabel(cat["description"])
                 desc_lbl.setObjectName("GrammarCatDesc")
                 card_layout.addWidget(desc_lbl)
 
@@ -712,12 +714,12 @@ class GrammarPage(QWidget):
             card_layout.setSpacing(8)
 
             header = QHBoxLayout()
-            title_lbl = QLabel(grid["name"])
+            title_lbl = ConlangLabel(grid["name"])
             title_lbl.setObjectName("GrammarParadigmTitle")
             header.addWidget(title_lbl)
 
             if grid.get("description"):
-                desc_lbl = QLabel(grid["description"])
+                desc_lbl = ConlangLabel(grid["description"])
                 desc_lbl.setObjectName("GrammarParadigmDesc")
                 header.addWidget(desc_lbl)
 
