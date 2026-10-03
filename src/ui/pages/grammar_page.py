@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QGridLayout, QSpinBox,
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor
 from digital_keyboard import (
     apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget, ConlangLabel,
     track_conlang_combo,
@@ -20,6 +21,46 @@ except ImportError:
     from ..database.grammar_db import GrammarRepository
 
 AFFIX_TYPES = ["prefix", "suffix", "infix", "circumfix", "suprafix", "other"]
+
+PARADIGM_CORNER = "Form \\ Feature"
+
+
+def _normalize_grid(headers, rows):
+    """Return (headers, rows) as a clean rectangle.
+
+    Stored format: headers = [corner, col1, col2, ...]
+                   rows    = [[row_label, cell1, cell2, ...], ...]
+    Grids saved by the old dialog kept NO row labels (rows had one cell fewer than
+    headers); those get "Row n" labels here so they line up and nothing is lost.
+    """
+    headers = [str(h) for h in (headers or [])]
+    if not headers:
+        return [], []
+    n = len(headers)
+    out = []
+    for i, row in enumerate(rows or []):
+        row = [str(c) for c in row]
+        if len(row) == n - 1:                      # old format: label was never saved
+            row = [f"Row {i + 1}"] + row
+        out.append((row + [""] * n)[:n])
+    return headers, out
+
+
+def _mark_label_cells(tbl: QTableWidget) -> None:
+    """Make the top row and left column look like labels (bold, shaded)."""
+    shade = QBrush(QColor("#eef2f7"))
+    for r in range(tbl.rowCount()):
+        for c in range(tbl.columnCount()):
+            if r != 0 and c != 0:
+                continue
+            it = tbl.item(r, c)
+            if it is None:
+                it = QTableWidgetItem("")
+                tbl.setItem(r, c, it)
+            f = it.font()
+            f.setBold(True)
+            it.setFont(f)
+            it.setBackground(shade)
 
 class _RuleDialog(QDialog):
     def __init__(self, parent=None, data: Optional[dict] = None, categories: Optional[List[dict]] = None):
@@ -146,16 +187,23 @@ class _CategoryDialog(QDialog):
         }
 
 class _ParadigmDialog(QDialog):
+    """Edit a paradigm grid.
+
+    The table IS the grid: the top row holds the column labels, the left column
+    holds the row labels, everything else is a form. Changing Columns / Rows only
+    adds or removes cells at the edges; anything you already typed is kept.
+    """
+
     def __init__(self, parent=None, data: Optional[dict] = None):
         super().__init__(parent)
         self.setWindowTitle("Edit Paradigm" if data else "Add Paradigm Grid")
-        self.setMinimumSize(600, 450)
+        self.setMinimumSize(640, 480)
 
         layout = QVBoxLayout(self)
 
         form = QFormLayout()
         self.input_name = QLineEdit()
-        self.input_name.setPlaceholderText("e.g., Verb Conjugation: To Be")
+        self.input_name.setPlaceholderText("e.g., Noun Declension, Verb Conjugation: To Be")
         form.addRow("Grid Name:", self.input_name)
 
         self.input_desc = QLineEdit()
@@ -165,30 +213,35 @@ class _ParadigmDialog(QDialog):
         dim_row = QHBoxLayout()
         self.spin_cols = QSpinBox()
         self.spin_cols.setRange(1, 20)
-        self.spin_cols.setValue(4)
-        self.spin_cols.valueChanged.connect(self._rebuild_preview)
+        self.spin_cols.setValue(2)
         dim_row.addWidget(QLabel("Columns:"))
         dim_row.addWidget(self.spin_cols)
 
         self.spin_rows = QSpinBox()
         self.spin_rows.setRange(1, 50)
-        self.spin_rows.setValue(4)
-        self.spin_rows.valueChanged.connect(self._rebuild_preview)
+        self.spin_rows.setValue(3)
         dim_row.addWidget(QLabel("Rows:"))
         dim_row.addWidget(self.spin_rows)
         dim_row.addStretch()
-        form.addRow("Dimensions:", dim_row)
+        form.addRow("Size:", dim_row)
 
         layout.addLayout(form)
 
-        lbl_hint = QLabel("Fill in the paradigm cells below:")
+        lbl_hint = QLabel(
+            "Type directly in the grid. The shaded top row and left column are the labels "
+            "(e.g. Singular / Plural, Nominative / Genitive). Tab moves to the next cell."
+        )
         lbl_hint.setObjectName("GrammarLabelHint")
+        lbl_hint.setWordWrap(True)
         layout.addWidget(lbl_hint)
 
         self.table = QTableWidget()
         install_conlang_delegate(self.table, 16)
         self.table.setObjectName("GrammarParadigmTable")
         self.table.setAlternatingRowColors(True)
+        self.table.horizontalHeader().setVisible(False)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.table, stretch=1)
 
         btns_row = QHBoxLayout()
@@ -205,38 +258,49 @@ class _ParadigmDialog(QDialog):
         if data:
             self.input_name.setText(data.get("name", ""))
             self.input_desc.setText(data.get("description", ""))
-            hdrs = data.get("headers", [])
-            rows = data.get("rows", [])
-            if hdrs:
-                self.spin_cols.setValue(max(len(hdrs), 1))
-            if rows:
-                self.spin_rows.setValue(max(len(rows), 1))
-            self._rebuild_preview()
-            for ci, h in enumerate(hdrs):
-                if ci < self.table.columnCount():
-                    self.table.setItem(0, ci, QTableWidgetItem(str(h)))
-            for ri, row_data in enumerate(rows):
-                for ci, cell in enumerate(row_data):
-                    if ri + 1 < self.table.rowCount() and ci < self.table.columnCount():
-                        self.table.setItem(ri + 1, ci, QTableWidgetItem(str(cell)))
+            headers, rows = _normalize_grid(data.get("headers"), data.get("rows"))
+            if headers:
+                for spin, value in ((self.spin_cols, max(len(headers) - 1, 1)),
+                                    (self.spin_rows, max(len(rows), 1))):
+                    spin.blockSignals(True)
+                    spin.setValue(value)
+                    spin.blockSignals(False)
+                self._rebuild_preview()
+                for ci, h in enumerate(headers):
+                    if ci < self.table.columnCount():
+                        self.table.setItem(0, ci, QTableWidgetItem(h))
+                for ri, row in enumerate(rows):
+                    for ci, cell in enumerate(row):
+                        if ri + 1 < self.table.rowCount() and ci < self.table.columnCount():
+                            self.table.setItem(ri + 1, ci, QTableWidgetItem(cell))
+                _mark_label_cells(self.table)
+            else:
+                self._rebuild_preview()
         else:
             self._rebuild_preview()
+
+        self.spin_cols.valueChanged.connect(self._rebuild_preview)
+        self.spin_rows.valueChanged.connect(self._rebuild_preview)
         apply_conlang_to_fields(self, 12)
 
     def _rebuild_preview(self):
+        """Resize the grid. Existing cells are kept; only NEW label cells get defaults."""
         cols = self.spin_cols.value()
         rows = self.spin_rows.value()
-        self.table.setColumnCount(cols + 1)  # +1 for row-header column
-        self.table.setRowCount(rows + 1)     # +1 for header row
+        self.table.setColumnCount(cols + 1)      # +1 for the row-label column
+        self.table.setRowCount(rows + 1)         # +1 for the column-label row
 
-        self.table.setItem(0, 0, QTableWidgetItem("Form \\ Feature"))
+        def ensure(r, c, text):
+            if self.table.item(r, c) is None:
+                self.table.setItem(r, c, QTableWidgetItem(text))
+
+        ensure(0, 0, PARADIGM_CORNER)
         for ci in range(cols):
-            self.table.setItem(0, ci + 1, QTableWidgetItem(f"Col {ci + 1}"))
+            ensure(0, ci + 1, f"Col {ci + 1}")
         for ri in range(rows):
-            self.table.setItem(ri + 1, 0, QTableWidgetItem(f"Row {ri + 1}"))
-
+            ensure(ri + 1, 0, f"Row {ri + 1}")
+        _mark_label_cells(self.table)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.verticalHeader().setVisible(False)
 
     def _validate(self):
         if not self.input_name.text().strip():
@@ -247,23 +311,24 @@ class _ParadigmDialog(QDialog):
     def get_data(self) -> dict:
         cols = self.spin_cols.value()
         rows = self.spin_rows.value()
-        headers = []
-        for ci in range(cols):
-            item = self.table.item(0, ci + 1)
-            headers.append(item.text().strip() if item and item.text().strip() else f"Col {ci + 1}")
+
+        def text(r, c, default=""):
+            item = self.table.item(r, c)
+            t = item.text().strip() if item else ""
+            return t if t else default
+
+        headers = [text(0, 0, PARADIGM_CORNER)] + [text(0, ci + 1, f"Col {ci + 1}") for ci in range(cols)]
         grid_rows = []
         for ri in range(rows):
-            row_data = []
-            for ci in range(cols):
-                item = self.table.item(ri + 1, ci + 1)
-                row_data.append(item.text().strip() if item else "")
-            grid_rows.append(row_data)
+            label = text(ri + 1, 0, f"Row {ri + 1}")
+            grid_rows.append([label] + [text(ri + 1, ci + 1) for ci in range(cols)])
         return {
             "name": self.input_name.text().strip(),
             "description": self.input_desc.text().strip(),
-            "headers": ["Form \\ Feature"] + headers,
+            "headers": headers,
             "rows": grid_rows,
         }
+
 
 class _TemplateDialog(QDialog):
     def __init__(self, parent=None, data: Optional[dict] = None):
@@ -505,15 +570,6 @@ class GrammarPage(QWidget):
         btn_add.clicked.connect(self._add_paradigm)
         top.addWidget(btn_add)
 
-        btn_edit = QPushButton("Edit")
-        btn_edit.clicked.connect(self._edit_paradigm)
-        top.addWidget(btn_edit)
-
-        btn_delete = QPushButton("Delete")
-        btn_delete.setObjectName("GrammarBtnDelete")
-        btn_delete.clicked.connect(self._delete_paradigm)
-        top.addWidget(btn_delete)
-
         top.addStretch()
         layout.addWidget(top_bar)
 
@@ -728,29 +784,38 @@ class GrammarPage(QWidget):
 
             header.addStretch()
 
+            btn_card_edit = QPushButton("Edit")
+            btn_card_edit.clicked.connect(lambda _=False, gid=grid["id"]: self._edit_paradigm(gid))
+            header.addWidget(btn_card_edit)
+            btn_card_del = QPushButton("Delete")
+            btn_card_del.setObjectName("GrammarBtnDelete")
+            btn_card_del.clicked.connect(lambda _=False, gid=grid["id"]: self._delete_paradigm(gid))
+            header.addWidget(btn_card_del)
+
             card.setProperty("paradigm_id", grid["id"])
 
             card_layout.addLayout(header)
 
-            headers = grid.get("headers", [])
-            rows = grid.get("rows", [])
+            headers, rows = _normalize_grid(grid.get("headers"), grid.get("rows"))
             if headers:
                 tbl = QTableWidget(len(rows) + 1, len(headers))
                 install_conlang_delegate(tbl, 16)
                 tbl.setObjectName("GrammarParadigmTable")
                 tbl.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+                tbl.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+                tbl.horizontalHeader().setVisible(False)
                 tbl.verticalHeader().setVisible(False)
                 tbl.setAlternatingRowColors(True)
 
                 for ci, h in enumerate(headers):
-                    tbl.setItem(0, ci, QTableWidgetItem(str(h)))
-
+                    tbl.setItem(0, ci, QTableWidgetItem(h))
                 for ri, row_data in enumerate(rows):
                     for ci, cell in enumerate(row_data):
-                        tbl.setItem(ri + 1, ci, QTableWidgetItem(str(cell)))
+                        tbl.setItem(ri + 1, ci, QTableWidgetItem(cell))
+                _mark_label_cells(tbl)
 
                 tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-                tbl.setMinimumHeight(min(len(rows) + 2, 12) * 32)
+                tbl.setMinimumHeight(min(len(rows) + 1, 12) * 34 + 6)
                 card_layout.addWidget(tbl)
 
             self.paradigms_layout.addWidget(card)
@@ -786,16 +851,6 @@ class GrammarPage(QWidget):
         if not rows:
             return None
         return self.templates_table.item(rows[0].row(), 5).text()
-
-    def _selected_paradigm_id(self) -> Optional[str]:
-        rows = self.paradigms_scroll.widget().findChildren(QFrame)
-        for card in self.paradigms_container.findChildren(QFrame):
-            if card.property("paradigm_id") and card.property("paradigm_id") != "":
-                tables = card.findChildren(QTableWidget)
-                for tbl in tables:
-                    if tbl.selectionModel().selectedRows():
-                        return card.property("paradigm_id")
-        return None
 
     def _add_rule(self):
         categories = self.grammar_repo.get_categories(self.language_id)
@@ -894,17 +949,9 @@ class GrammarPage(QWidget):
             )
             self.refresh_paradigms()
 
-    def _edit_paradigm(self):
-        grid_id = self._selected_paradigm_id()
-        if not grid_id:
-            QMessageBox.information(self, "No selection", "Click a paradigm grid table to select it, then click Edit.")
-            return
-        paradigms = self.grammar_repo.get_paradigms(self.language_id)
-        grid_data = None
-        for p in paradigms:
-            if p["id"] == grid_id:
-                grid_data = p
-                break
+    def _edit_paradigm(self, grid_id: str):
+        grid_data = next((p for p in self.grammar_repo.get_paradigms(self.language_id)
+                          if p["id"] == grid_id), None)
         if not grid_data:
             return
         dlg = _ParadigmDialog(self, data=grid_data)
@@ -919,13 +966,12 @@ class GrammarPage(QWidget):
             )
             self.refresh_paradigms()
 
-    def _delete_paradigm(self):
-        grid_id = self._selected_paradigm_id()
-        if not grid_id:
-            QMessageBox.information(self, "No selection", "Click a paradigm grid to select it, then click Delete.")
-            return
+    def _delete_paradigm(self, grid_id: str):
+        grid_data = next((p for p in self.grammar_repo.get_paradigms(self.language_id)
+                          if p["id"] == grid_id), None)
+        name = grid_data["name"] if grid_data else "this paradigm grid"
         res = QMessageBox.question(
-            self, "Delete Paradigm", "Delete this paradigm grid?",
+            self, "Delete Paradigm", f"Delete '{name}'?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if res == QMessageBox.StandardButton.Yes:
