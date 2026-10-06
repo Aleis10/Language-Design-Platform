@@ -1,0 +1,107 @@
+/* Transcribe Page Stylesheet */
+
+QWidget#TrTopBar {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    min-height: 40px;
+}
+
+QLabel#TrTitle {
+    font-size: 16px;
+    font-weight: bold;
+    color: #111111;
+}
+
+QLabel#TrStatus {
+    color: #666666;
+    font-size: 12px;
+}
+
+QLabel#TrSection {
+    color: #333333;
+    font-size: 12px;
+    font-weight: bold;
+    margin-top: 4px;
+}
+
+QLabel#TrHint {
+    color: #777777;
+    font-size: 11px;
+    font-weight: normal;
+}
+
+QLabel#TrGloss {
+    color: #444444;
+    font-size: 13px;
+    padding: 2px 2px;
+}
+
+QLabel#TrWarn {
+    color: #8a5a00;
+    background-color: #fff6e0;
+    border: 1px solid #f0d9a0;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 12px;
+}
+
+QPushButton#TrRecord {
+    background-color: #d9534f;
+    color: #ffffff;
+    font-weight: bold;
+    border: none;
+    padding: 6px 14px;
+}
+QPushButton#TrRecord:hover {
+    background-color: #c9302c;
+}
+QPushButton#TrRecord:disabled {
+    background-color: #e3a8a6;
+}
+
+QPushButton#TrPrimary {
+    background-color: #007acc;
+    color: #ffffff;
+    font-weight: bold;
+    border: none;
+    padding: 6px 18px;
+}
+QPushButton#TrPrimary:hover {
+    background-color: #005999;
+}
+
+QTableWidget#TrTable {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    alternate-background-color: #f7f9fb;
+    gridline-color: #e8eaed;
+    selection-background-color: #e3f0ff;
+    selection-color: #111111;
+}
+QTableWidget#TrTable::item {
+    padding: 4px 8px;
+    color: #111111;
+}
+QTableWidget#TrTable QHeaderView::section {
+    background-color: #f0f2f5;
+    border: none;
+    border-bottom: 1px solid #dcdcdc;
+    padding: 6px 8px;
+    font-weight: bold;
+    color: #333333;
+}
+
+QDialog {
+    background-color: #ffffff;
+}
+QDialog QLabel {
+    color: #222222;
+}
+QDialog QLineEdit, QDialog QComboBox {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 6px 8px;
+    color: #111111;
+}

@@ -17,18 +17,21 @@ from .pages.glyphs_page import Glyphs_Page
 from .pages.lexicon_page import LexiconPage
 from .pages.keyboard_page import KeyboardPage
 from .pages.grammar_page import GrammarPage
+from .pages.transcribe_page import TranscribePage
 
 try:
     from database.glyph_db import GlyphRepository
     from database.lexicon_db import LexiconRepository
     from database.keyboard_db import KeyboardRepository
     from database.grammar_db import GrammarRepository
+    from database.transcribe_db import TranscribeSettingsRepository
     from database.archive_manager import ProjectArchiveManager
 except (ImportError, ValueError):
     from ..database.glyph_db import GlyphRepository
     from ..database.lexicon_db import LexiconRepository
     from ..database.keyboard_db import KeyboardRepository
     from ..database.grammar_db import GrammarRepository
+    from ..database.transcribe_db import TranscribeSettingsRepository
     from ..database.archive_manager import ProjectArchiveManager
 
 
@@ -58,6 +61,7 @@ class MainWindow(QMainWindow):
         self.lexicon_repo = lexicon_repo or (LexiconRepository(self.db_manager) if self.db_manager else None)
         self.keyboard_repo = keyboard_repo or (KeyboardRepository(self.db_manager) if self.db_manager else None)
         self.grammar_repo = grammar_repo or (GrammarRepository(self.db_manager) if self.db_manager else None)
+        self.transcribe_repo = TranscribeSettingsRepository(self.db_manager) if self.db_manager else None
         self.language_id = language_id
         self.db_path = db_path
         self.project_name = project_name
@@ -108,6 +112,13 @@ class MainWindow(QMainWindow):
             grammar_repo=self.grammar_repo,
             language_id=self.language_id,
         )
+        self.transcribe_page = TranscribePage(
+            lexicon_repo=self.lexicon_repo,
+            grammar_repo=self.grammar_repo,
+            settings_repo=self.transcribe_repo,
+            language_id=self.language_id,
+            session_dir=self.session_dir,
+        )
 
         self.pages = QStackedWidget()
         self.pages.addWidget(self.overview_page)
@@ -115,6 +126,7 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self.keyboard_page)
         self.pages.addWidget(self.lexicon_page)
         self.pages.addWidget(self.grammar_page)
+        self.pages.addWidget(self.transcribe_page)
 
         self.sidebar = Sidebar(on_page_changed_callback=self.pages.setCurrentIndex)
 
@@ -485,6 +497,10 @@ class MainWindow(QMainWindow):
         self._rebuild_pages()
 
     def _rebuild_pages(self):
+        old = getattr(self, "transcribe_page", None)
+        if old is not None:
+            old.shutdown()
+        self.transcribe_repo = TranscribeSettingsRepository(self.db_manager) if self.db_manager else None
         if self.session_dir:
             try:
                 from digital_keyboard import register_language_font
@@ -520,14 +536,25 @@ class MainWindow(QMainWindow):
             grammar_repo=self.grammar_repo,
             language_id=self.language_id,
         )
+        self.transcribe_page = TranscribePage(
+            lexicon_repo=self.lexicon_repo,
+            grammar_repo=self.grammar_repo,
+            settings_repo=self.transcribe_repo,
+            language_id=self.language_id,
+            session_dir=self.session_dir,
+        )
         self.pages.addWidget(self.overview_page)
         self.pages.addWidget(self.glyphs_page)
         self.pages.addWidget(self.keyboard_page)
         self.pages.addWidget(self.lexicon_page)
         self.pages.addWidget(self.grammar_page)
+        self.pages.addWidget(self.transcribe_page)
         self.statusBar().showMessage(f"Loaded: {self.project_name}", 4000)
 
     def closeEvent(self, event):
+        page = getattr(self, "transcribe_page", None)
+        if page is not None:
+            page.shutdown()
         if self.archive_path and self.session_dir and self.archive_manager:
             try:
                 self.archive_manager.save_archive(

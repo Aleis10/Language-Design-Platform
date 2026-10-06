@@ -43,7 +43,8 @@ class Sidebar(QFrame):
             (get_icon("logogram.svg"), "Logograms"),
             (get_icon("Keyboard.svg"), "Keyboard"),
             (get_icon("edit.svg"), "Lexicon"),
-            (get_icon("grammer.svg"), "Grammar")
+            (get_icon("grammer.svg"), "Grammar"),
+            (get_icon("transcribe.svg"), "Transcribe"),
         ]
 
         for index, (icon_path, label) in enumerate(nav_items):

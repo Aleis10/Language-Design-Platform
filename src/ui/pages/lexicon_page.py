@@ -238,6 +238,36 @@ class _EntryDialog(QDialog):
             "audio_variants": self._get_variants(),
         }
 
+def add_entry_via_dialog(parent, lexicon_repo, language_id: str, audio_dir: str, data_dir: str,
+                         english: str = "") -> bool:
+    """Open the Add Entry dialog and save the result. `english` pre-fills the English field.
+    Returns True if an entry was added. Also used by the Transcribe page."""
+    dlg = _EntryDialog(parent, base_audio_dir=audio_dir, data_dir=data_dir)
+    if english:
+        dlg.input_english.setText(english)
+    if dlg.exec() != QDialog.DialogCode.Accepted:
+        return False
+    data = dlg.get_data()
+    entry_id = lexicon_repo.add_entry(
+        language_id=language_id,
+        headword=data["headword"],
+        meaning=data["meaning"],
+        ipa_reading=data["ipa_reading"],
+        part_of_speech=data["part_of_speech"],
+        english_translation=data.get("english_translation", ""),
+        description=data.get("description", ""),
+    )
+    for variant in data.get("audio_variants", []):
+        if variant.get("audio_path"):
+            lexicon_repo.add_entry_audio(
+                entry_id,
+                audio_path=variant["audio_path"],
+                ipa_reading=variant.get("ipa_reading", ""),
+                variant_label=variant.get("variant_label", ""),
+            )
+    return True
+
+
 class LexiconPage(QWidget):
     def __init__(self, lexicon_repo: LexiconRepository, language_id: str, session_dir: str = "", parent=None):
         super().__init__(parent)
@@ -387,26 +417,7 @@ class LexiconPage(QWidget):
         return None
 
     def _add_entry(self):
-        dlg = _EntryDialog(self, base_audio_dir=self.audio_dir, data_dir=self.data_dir)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            data = dlg.get_data()
-            entry_id = self.lexicon_repo.add_entry(
-                language_id=self.language_id,
-                headword=data["headword"],
-                meaning=data["meaning"],
-                ipa_reading=data["ipa_reading"],
-                part_of_speech=data["part_of_speech"],
-                english_translation=data.get("english_translation", ""),
-                description=data.get("description", ""),
-            )
-            for variant in data.get("audio_variants", []):
-                if variant.get("audio_path"):
-                    self.lexicon_repo.add_entry_audio(
-                        entry_id,
-                        audio_path=variant["audio_path"],
-                        ipa_reading=variant.get("ipa_reading", ""),
-                        variant_label=variant.get("variant_label", ""),
-                    )
+        if add_entry_via_dialog(self, self.lexicon_repo, self.language_id, self.audio_dir, self.data_dir):
             self.refresh_table()
 
     def _edit_entry(self):
