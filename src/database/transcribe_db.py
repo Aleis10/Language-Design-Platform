@@ -11,9 +11,6 @@ except ImportError:                                   # pragma: no cover
 DEFAULTS: Dict[str, Any] = {
     "ignore_words": ["the", "a", "an"],   # English words dropped when the lexicon has no entry for them
     "unknown": "bracket",                  # bracket -> [word] | keep -> word | skip -> omit
-    "analyzer": "auto",                    # auto | builtin | spacy
-    "whisper_model": "base.en",
-    "auto_translate": True,                # translate straight after speech is transcribed
 }
 
 

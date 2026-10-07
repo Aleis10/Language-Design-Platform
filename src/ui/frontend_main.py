@@ -4,7 +4,7 @@ from typing import Dict, Optional
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QLabel,
     QMessageBox, QFileDialog, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox,
-    QPushButton, QTableWidget, QTableView, QApplication,
+    QPushButton, QTableWidget, QTableView, QApplication, QDialog,
 )
 from PySide6.QtGui import QAction, QKeySequence, QFont, QShortcut, QKeyEvent
 from PySide6.QtCore import Qt, QEvent, QObject, Signal, QTimer
@@ -137,12 +137,11 @@ class MainWindow(QMainWindow):
 
         self.osk = None
         self.kbd_button = FloatingKeyboardButton()
-        self.kbd_button.toggled_on.connect(self._toggle_osk)
+        self.kbd_button.toggled.connect(self._on_kbd_button_toggled)
         self._install_floating_kbd()
 
         self._reload_conlang_mappings()
         self._osk_shortcut = None
-        self._setup_osk_hotkey()
         
         # Install event filter for physical keyboard glyph typing
         QApplication.instance().installEventFilter(self)
@@ -172,29 +171,60 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _set_kbd_button_checked(self, checked: bool):
+        # update the button without re-triggering its toggled handler
+        if not self.kbd_button:
+            return
+        self.kbd_button.blockSignals(True)
+        self.kbd_button.setChecked(checked)
+        self.kbd_button.blockSignals(False)
+        self.kbd_button._update_style()
+
+    def _on_kbd_button_toggled(self, checked: bool):
+        if checked and self.osk is None:
+            self._open_osk()
+        elif not checked and self.osk is not None:
+            if self.osk.isMinimized():
+                # minimized keyboard: bring it back instead of closing
+                self.osk.showNormal()
+                self.osk.raise_()
+                self._set_kbd_button_checked(True)
+            else:
+                self._close_osk()
+
     def _toggle_osk(self):
         if self.osk is not None:
-            self._close_osk()
+            if self.osk.isMinimized():
+                self.osk.showNormal()
+                self.osk.raise_()
+            else:
+                self._close_osk()
             return
+        self._open_osk()
+
+    def _open_osk(self):
         # never silently fail — show why if we can't open
         if not self.keyboard_repo:
             self.statusBar().showMessage("Keyboard repo missing; cannot open OSK", 3000)
-            if self.kbd_button:
-                self.kbd_button.setChecked(False)
+            self._set_kbd_button_checked(False)
             return
         if not self.language_id:
             self.statusBar().showMessage("No language loaded; cannot open OSK", 3000)
-            if self.kbd_button:
-                self.kbd_button.setChecked(False)
+            self._set_kbd_button_checked(False)
             return
+        # if a modal popup is open, parent the keyboard to it so the popup
+        # does not block the keyboard's close button
+        osk_parent = QApplication.activeModalWidget() or self
         self.osk = OnScreenKeyboard(
             keyboard_repo=self.keyboard_repo,
             language_id=self.language_id,
             session_dir=self.session_dir or "",
-            parent=self,
+            parent=osk_parent,
             mappings=getattr(self, '_glyph_mappings', {}),
         )
         self.osk.closed.connect(self._on_osk_closed)
+        self.osk.destroyed.connect(self._on_osk_destroyed)
+        self._set_kbd_button_checked(True)
         self.osk.show()
         self._position_osk()
 
@@ -207,25 +237,23 @@ class MainWindow(QMainWindow):
         self.osk.move(x, y)
 
     def _close_osk(self):
-        if self.osk is not None:
+        osk = self.osk
+        self.osk = None
+        if osk is not None:
             try:
-                self.osk.close()
+                osk.close()
             except Exception:
                 pass
-            self.osk = None
-        if self.kbd_button:
-            self.kbd_button.setChecked(False)
+        self._set_kbd_button_checked(False)
 
     def _on_osk_closed(self):
         self.osk = None
-        if self.kbd_button:
-            self.kbd_button.setChecked(False)
+        self._set_kbd_button_checked(False)
 
-    def _setup_osk_hotkey(self):
-        if not self._osk_shortcut:
-            self._osk_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Space"), self)
-            self._osk_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
-            self._osk_shortcut.activated.connect(self._toggle_osk)
+    def _on_osk_destroyed(self, *_):
+        # keyboard was deleted together with the popup it was parented to
+        self.osk = None
+        self._set_kbd_button_checked(False)
 
     def _reload_conlang_mappings(self):
         mappings: Dict[str, Dict] = {}
@@ -283,6 +311,21 @@ class MainWindow(QMainWindow):
         return None
 
     def eventFilter(self, obj, event):
+        et = event.type()
+        # Ctrl+Shift+Enter / Ctrl+Shift+Space toggles the keyboard, even over popups
+        if et == QEvent.Type.KeyPress and not event.isAutoRepeat():
+            mods = event.modifiers()
+            want = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
+            if (mods & want) == want and not (mods & (Qt.KeyboardModifier.AltModifier
+                                                      | Qt.KeyboardModifier.MetaModifier)) \
+                    and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+                self._toggle_osk()
+                return True
+        # a modal popup opening closes the keyboard so nothing is left stuck on top
+        if et == QEvent.Type.Show and self.osk is not None \
+                and isinstance(obj, QDialog) and obj.isModal() \
+                and obj is not self.osk and not self.osk.isAncestorOf(obj):
+            self._close_osk()
         if event.type() == QEvent.Type.KeyPress and self.osk is not None \
                 and not event.isAutoRepeat() \
                 and not (event.modifiers() & (Qt.KeyboardModifier.ControlModifier
@@ -497,9 +540,6 @@ class MainWindow(QMainWindow):
         self._rebuild_pages()
 
     def _rebuild_pages(self):
-        old = getattr(self, "transcribe_page", None)
-        if old is not None:
-            old.shutdown()
         self.transcribe_repo = TranscribeSettingsRepository(self.db_manager) if self.db_manager else None
         if self.session_dir:
             try:
@@ -552,9 +592,6 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Loaded: {self.project_name}", 4000)
 
     def closeEvent(self, event):
-        page = getattr(self, "transcribe_page", None)
-        if page is not None:
-            page.shutdown()
         if self.archive_path and self.session_dir and self.archive_manager:
             try:
                 self.archive_manager.save_archive(

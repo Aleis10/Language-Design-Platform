@@ -16,7 +16,7 @@ QComboBox#StatusCombo {
 
 QScrollArea#OverviewScrollArea {
     border: none;
-    background-color: #f8f9fa;
+    background-color: palette(window);
 }
 
 /* Base Card Style */

@@ -103,9 +103,11 @@ class Glyphs_Page(QWidget):
         self.active_group_id: Optional[str] = None
         self.active_glyph_data: Optional[Dict[str, Any]] = None
 
+        self.setObjectName("GlyphsPageRoot")
         self._load_stylesheet()
 
         self.stack = QStackedWidget(self)
+        self.stack.setObjectName("GlyphsStack")
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(self.stack)
@@ -125,6 +127,7 @@ class Glyphs_Page(QWidget):
 
     def _build_gallery_view(self):
         self.gallery_widget = QWidget()
+        self.gallery_widget.setObjectName("GlyphsGallery")
         gallery_layout = QVBoxLayout(self.gallery_widget)
         gallery_layout.setContentsMargins(0, 0, 0, 0)
         gallery_layout.setSpacing(0)
@@ -158,8 +161,10 @@ class Glyphs_Page(QWidget):
         self.scroll_area = QScrollArea()
         self.scroll_area.setObjectName("GlyphsScrollArea")
         self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.viewport().setObjectName("GlyphsViewport")
 
         self.cards_container = QWidget()
+        self.cards_container.setObjectName("GlyphsCardsContainer")
         self.cards_layout = QVBoxLayout(self.cards_container)
         self.cards_layout.setContentsMargins(24, 20, 24, 24)
         self.cards_layout.setSpacing(18)
@@ -366,6 +371,7 @@ class Glyphs_Page(QWidget):
 
     def _build_studio_view(self):
         self.studio_widget = QWidget()
+        self.studio_widget.setObjectName("GlyphsStudio")
         studio_layout = QVBoxLayout(self.studio_widget)
         studio_layout.setContentsMargins(0, 0, 0, 0)
         studio_layout.setSpacing(0)
@@ -401,6 +407,7 @@ class Glyphs_Page(QWidget):
         studio_layout.addWidget(header)
 
         workspace = QWidget()
+        workspace.setObjectName("StudioWorkspace")
         w_layout = QHBoxLayout(workspace)
         w_layout.setContentsMargins(12, 12, 12, 12)
         w_layout.setSpacing(12)

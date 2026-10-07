@@ -45,20 +45,6 @@ QLabel#TrWarn {
     font-size: 12px;
 }
 
-QPushButton#TrRecord {
-    background-color: #d9534f;
-    color: #ffffff;
-    font-weight: bold;
-    border: none;
-    padding: 6px 14px;
-}
-QPushButton#TrRecord:hover {
-    background-color: #c9302c;
-}
-QPushButton#TrRecord:disabled {
-    background-color: #e3a8a6;
-}
-
 QPushButton#TrPrimary {
     background-color: #007acc;
     color: #ffffff;
@@ -104,4 +90,24 @@ QDialog QLineEdit, QDialog QComboBox {
     border-radius: 4px;
     padding: 6px 8px;
     color: #111111;
+}
+
+/* Input fields are white */
+QPlainTextEdit, QLineEdit, QComboBox {
+    background-color: #ffffff;
+    color: #111111;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 6px 8px;
+    selection-background-color: #007acc;
+    selection-color: #ffffff;
+}
+QPlainTextEdit:focus, QLineEdit:focus, QComboBox:focus {
+    border: 1px solid #007acc;
+}
+QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    color: #111111;
+    selection-background-color: #007acc;
+    selection-color: #ffffff;
 }

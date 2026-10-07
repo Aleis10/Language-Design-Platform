@@ -87,7 +87,16 @@ class OnScreenKeyboard(QWidget):
         self._key_buttons: Dict[str, QPushButton] = {}
         self._last_target: Optional[QWidget] = None   # last text field the user was in
 
-        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
+        # title bar with minimize + close only (no maximize), always on top
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.CustomizeWindowHint
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowSystemMenuHint
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
         self.setWindowTitle("On-Screen Keyboard")
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
@@ -198,12 +207,6 @@ class OnScreenKeyboard(QWidget):
         lbl.setObjectName("OSKTitle")
         header.addWidget(lbl)
         header.addStretch()
-        btn_close = QToolButton()
-        btn_close.setText("✕")
-        btn_close.setObjectName("OSKClose")
-        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_close.clicked.connect(self.close)
-        header.addWidget(btn_close)
         root.addLayout(header)
 
         hint = QLabel("Click to insert mapped characters into focused field.")
@@ -241,6 +244,7 @@ class OnScreenKeyboard(QWidget):
         self._key_buttons["Backspace"] = backspace_btn
 
         root.addLayout(grid)
+        root.setSizeConstraint(QVBoxLayout.SizeConstraint.SetFixedSize)
         self.setStyleSheet(self._qss())
 
     def highlight_key(self, key_code: str):
@@ -290,9 +294,4 @@ class OnScreenKeyboard(QWidget):
             padding: 2px;
         }
         QPushButton:hover { background: #eef4fd; border-color: #007acc; }
-        QToolButton#OSKClose {
-            border: none; background: transparent; color: #666666;
-            font-size: 14px; font-weight: bold;
-        }
-        QToolButton#OSKClose:hover { color: #c0392b; }
         """

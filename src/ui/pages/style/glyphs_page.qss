@@ -138,3 +138,18 @@ QPushButton#BtnBackGallery {
 QPushButton#BtnBackGallery:hover {
     background-color: #f0f0f0;
 }
+
+/* Page background matches the other pages (window palette); header and cards stay white */
+QWidget#GlyphsPageRoot,
+QStackedWidget#GlyphsStack,
+QWidget#GlyphsGallery,
+QWidget#GlyphsStudio,
+QWidget#StudioWorkspace,
+QScrollArea#GlyphsScrollArea,
+QWidget#GlyphsViewport,
+QWidget#GlyphsCardsContainer {
+    background-color: palette(window);
+}
+QScrollArea#GlyphsScrollArea {
+    border: none;
+}
