@@ -14,11 +14,14 @@ from digital_keyboard import (
 
 QWERTY_ROWS = [
     ["`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="],
-    ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"],
+    ["Tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"],
     ["a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'"],
-    ["z", "x", "c", "v", "b", "n", "m", ",", ".", "/"],
-    [" "],
+    ["Shift", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/"],
+    ["Alt", " "],
 ]
+
+# keys that only act when they are mapped (or used in a dead key combination)
+SPECIAL_KEYS = ("Tab", "Shift", "Alt")
 
 _TEXT_WIDGETS = (QLineEdit, QTextEdit, QPlainTextEdit)
 
@@ -86,6 +89,8 @@ class OnScreenKeyboard(QWidget):
         self._mappings: Dict[str, Dict[str, Any]] = dict(mappings or {})
         self._key_buttons: Dict[str, QPushButton] = {}
         self._last_target: Optional[QWidget] = None   # last text field the user was in
+        self.key_handler = None                       # MainWindow sets this: handles dead keys
+        self._pending_dead_key: Optional[str] = None
 
         # title bar with minimize + close only (no maximize), always on top
         self.setWindowFlags(
@@ -224,12 +229,12 @@ class OnScreenKeyboard(QWidget):
                 btn = QPushButton()
                 btn.setObjectName(f"Key_{key}")
                 btn.setMinimumHeight(34)
-                btn.setMinimumWidth(40)
+                btn.setMinimumWidth(52 if key in SPECIAL_KEYS else 40)
                 btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
                 btn.clicked.connect(lambda _checked=False, b=btn: self._insert_from_button(b))
                 self._style_key(btn, key)
                 if key == " ":
-                    grid.addWidget(btn, row, 0, 1, 8)
+                    grid.addWidget(btn, row, col, 1, 8)    # space bar after the Alt key
                 else:
                     grid.addWidget(btn, row, col)
                 self._key_buttons[key] = btn
@@ -247,6 +252,15 @@ class OnScreenKeyboard(QWidget):
         root.setSizeConstraint(QVBoxLayout.SizeConstraint.SetFixedSize)
         self.setStyleSheet(self._qss())
 
+    def set_pending_dead(self, key_code: Optional[str]):
+        # keep the waiting dead key lit until its partner key is pressed
+        old = self._pending_dead_key
+        self._pending_dead_key = key_code
+        if old and old in self._key_buttons:
+            self._key_buttons[old].setStyleSheet("")
+        if key_code and key_code in self._key_buttons:
+            self._key_buttons[key_code].setStyleSheet("background: #e6a100; color: black;")
+
     def highlight_key(self, key_code: str):
         btn = self._key_buttons.get(key_code)
         if btn:
@@ -258,7 +272,23 @@ class OnScreenKeyboard(QWidget):
     def _target(self) -> Optional[QWidget]:
         return resolve_text_target(QApplication.focusWidget()) or self._last_target
 
+    def _key_code_of(self, button: QPushButton) -> Optional[str]:
+        for key, b in self._key_buttons.items():
+            if b is button:
+                return key
+        return None
+
     def _insert_from_button(self, button: QPushButton):
+        key_code = self._key_code_of(button)
+        if self.key_handler is not None and key_code and key_code != "Backspace":
+            target = self._target()
+            if target is not None:
+                target.setFocus()
+
+            if self.key_handler(key_code, target):
+                return
+            if key_code in SPECIAL_KEYS:
+                return   # an unmapped Tab / Shift / Alt types nothing
         text = button.property("insert_text")
         if text is None:
             text = button.text()
@@ -268,6 +298,10 @@ class OnScreenKeyboard(QWidget):
             target.setFocus()
 
     def _backspace(self):
+        # a waiting dead key is cancelled first, like on other keyboards
+        if self._pending_dead_key is not None and self.key_handler is not None \
+                and self.key_handler("Backspace", None):
+            return
         target = self._target()
         if target is not None:
             backspace_in_widget(target)

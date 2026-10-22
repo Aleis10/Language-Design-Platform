@@ -6,12 +6,12 @@ from PySide6.QtWidgets import (
     QMessageBox, QFileDialog, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox,
     QPushButton, QTableWidget, QTableView, QApplication, QDialog,
 )
-from PySide6.QtGui import QAction, QKeySequence, QFont, QShortcut, QKeyEvent
+from PySide6.QtGui import QAction, QKeySequence, QFont, QShortcut, QKeyEvent, QInputMethodEvent, QTextCharFormat
 from PySide6.QtCore import Qt, QEvent, QObject, Signal, QTimer
 from .components.coll_sidebar import Sidebar
 from .components.dark_file_dialog import open_dark_dialog
 from .components.floating_keyboard import FloatingKeyboardButton
-from .components.on_screen_keyboard import OnScreenKeyboard, insert_into_widget
+from .components.on_screen_keyboard import OnScreenKeyboard, insert_into_widget, resolve_text_target
 from .pages.overview import Overview_Page
 from .pages.glyphs_page import Glyphs_Page
 from .pages.lexicon_page import LexiconPage
@@ -224,6 +224,8 @@ class MainWindow(QMainWindow):
         )
         self.osk.closed.connect(self._on_osk_closed)
         self.osk.destroyed.connect(self._on_osk_destroyed)
+        self.osk.key_handler = self._on_osk_key_clicked
+        self._pending_dead = None
         self._set_kbd_button_checked(True)
         self.osk.show()
         self._position_osk()
@@ -239,6 +241,7 @@ class MainWindow(QMainWindow):
     def _close_osk(self):
         osk = self.osk
         self.osk = None
+        self._pending_dead = None
         if osk is not None:
             try:
                 osk.close()
@@ -248,6 +251,7 @@ class MainWindow(QMainWindow):
 
     def _on_osk_closed(self):
         self.osk = None
+        self._pending_dead = None
         self._set_kbd_button_checked(False)
 
     def _on_osk_destroyed(self, *_):
@@ -255,8 +259,17 @@ class MainWindow(QMainWindow):
         self.osk = None
         self._set_kbd_button_checked(False)
 
+    # dead key state: key waiting for its partner, keys used as dead keys, dead_key -> {base_key: char}
+    _pending_dead: Optional[str] = None
+    _dead_keys: set = set()
+    _dead_combos: Dict[str, Dict[str, str]] = {}
+    _preedit_widget = None
+
     def _reload_conlang_mappings(self):
         mappings: Dict[str, Dict] = {}
+        dead_combos: Dict[str, Dict[str, str]] = {}
+        dead_keys: set = set()
+        self._set_pending_dead(None)
         if self.keyboard_repo and self.language_id:
             try:
                 from digital_keyboard import glyph_character, register_language_font
@@ -264,6 +277,7 @@ class MainWindow(QMainWindow):
                     register_language_font(self.session_dir)
                 # Get the active preset from KeyboardPage
                 active_preset = None
+                presets = []
                 if hasattr(self, 'keyboard_page') and hasattr(self.keyboard_page, '_current_preset_id'):
                     active_preset = self.keyboard_page._current_preset_id
                 
@@ -290,11 +304,23 @@ class MainWindow(QMainWindow):
                         else:
                             print(f"[DEBUG-kbd2] glyph_character returned empty for glyph_id={m['glyph_id']}")
                     mappings[key_code] = {"char": char, "glyph_id": m.get("glyph_id"), "ppua": m.get("ppua") or ""}
+
+                # dead key combinations resolved to their font characters
+                preset_for_combos = active_preset or (presets[0]["id"] if not active_preset and presets else None)
+                if preset_for_combos:
+                    for c in self.keyboard_repo.get_dead_combos(preset_for_combos):
+                        dead_keys.add(c["dead_key_code"])   # a dead key even if its glyph is not built yet
+                        gid = c.get("result_glyph_id")
+                        gchar = glyph_character(self.session_dir, gid) if gid and self.session_dir else ""
+                        if gchar:
+                            dead_combos.setdefault(c["dead_key_code"], {})[c["base_key_code"]] = gchar
             except Exception as exc:
                 print(f"[DEBUG-kbd2] Failed to reload conlang mappings: {exc}")
                 mappings = {}
         self._glyph_mappings = mappings
-        print(f"[DEBUG-kbd2] Reloaded {len(mappings)} key mappings")
+        self._dead_combos = dead_combos
+        self._dead_keys = dead_keys
+        print(f"[DEBUG-kbd2] Reloaded {len(mappings)} key mappings, {sum(len(v) for v in dead_combos.values())} dead combinations")
         if getattr(self, 'osk', None) is not None:
             self.osk.set_mappings(mappings)
 
@@ -328,18 +354,114 @@ class MainWindow(QMainWindow):
             self._close_osk()
         if event.type() == QEvent.Type.KeyPress and self.osk is not None \
                 and not event.isAutoRepeat() \
-                and not (event.modifiers() & (Qt.KeyboardModifier.ControlModifier
-                                              | Qt.KeyboardModifier.AltModifier
-                                              | Qt.KeyboardModifier.MetaModifier)):
+                and (event.key() in (Qt.Key.Key_Alt, Qt.Key.Key_AltGr)
+                     or not (event.modifiers() & (Qt.KeyboardModifier.ControlModifier
+                                                  | Qt.KeyboardModifier.AltModifier
+                                                  | Qt.KeyboardModifier.MetaModifier))):
+            if self._pending_dead is not None and self._cancel_or_flush_dead(event):
+                return True
             key_code = self._qkey_to_key_code(event)
-            if key_code:
-                glyph = self._glyph_for_key(key_code)
-                if glyph:
-                    if self.osk is not None and hasattr(self.osk, 'highlight_key'):
-                        self.osk.highlight_key(key_code)
-                    self._insert_into_focus(glyph)
-                    return True  # swallow the original key
+            if key_code and self._handle_conlang_key(key_code):
+                return True  # swallow the original key
         return super().eventFilter(obj, event)
+
+    def _set_pending_dead(self, key_code: Optional[str], target=None):
+        # the waiting dead key: lit on the OSK, and its glyph (if any) shown underlined in the field
+        self._clear_preedit()
+        self._pending_dead = key_code
+        if getattr(self, 'osk', None) is not None and hasattr(self.osk, 'set_pending_dead'):
+            self.osk.set_pending_dead(key_code)
+        if key_code:
+            own = self._glyph_for_key(key_code)
+            if own:
+                self._show_preedit(own, target)
+
+    def _show_preedit(self, text: str, target=None):
+        widget = resolve_text_target(target or QApplication.focusWidget())
+        if widget is None or not text:
+            return
+        try:
+            fmt = QTextCharFormat()
+            fmt.setFontUnderline(True)
+            attr = QInputMethodEvent.Attribute(
+                QInputMethodEvent.AttributeType.TextFormat, 0, len(text), fmt)
+            QApplication.sendEvent(widget, QInputMethodEvent(text, [attr]))
+            self._preedit_widget = widget
+        except Exception as exc:
+            print(f"[DEBUG-kbd2] dead key preview failed: {exc}")
+
+    def _clear_preedit(self):
+        widget = self._preedit_widget
+        self._preedit_widget = None
+        if widget is None:
+            return
+        try:
+            QApplication.sendEvent(widget, QInputMethodEvent("", []))
+        except RuntimeError:
+            pass   # the field was deleted meanwhile
+
+    def _cancel_or_flush_dead(self, event) -> bool:
+        # keys that are not mapped letters while a dead key is waiting
+        key = event.key()
+        if key in (Qt.Key.Key_Shift, Qt.Key.Key_Control, Qt.Key.Key_Alt, Qt.Key.Key_Meta,
+                   Qt.Key.Key_CapsLock, Qt.Key.Key_AltGr):
+            return False   # modifier presses do not affect a pending dead key
+        if key in (Qt.Key.Key_Escape, Qt.Key.Key_Backspace):
+            self._set_pending_dead(None)   # cancel, nothing typed
+            return True
+        if key == Qt.Key.Key_Space:
+            dead = self._pending_dead
+            self._set_pending_dead(None)
+            own = self._glyph_for_key(dead) if dead else None
+            if own:
+                self._insert_into_focus(own)
+            return True    # space itself is consumed, like on other keyboards
+        if self._qkey_to_key_code(event) is None:
+            self._set_pending_dead(None)   # Enter, arrows, Tab ... just drop the pending key
+        return False
+
+    def _handle_conlang_key(self, key_code: str, target=None) -> bool:
+        # returns True when the key was consumed (typed a glyph or started a dead key)
+        def insert(text):
+            insert_into_widget(target or QApplication.focusWidget(), text)
+
+        pending = self._pending_dead
+        if pending is not None and key_code in ("Shift", "Alt") \
+                and key_code not in self._dead_combos.get(pending, {}):
+            return False   # Shift / Alt held for the next key does not cancel the dead key
+        if key_code == "Backspace":
+            if pending is None:
+                return False
+            self._set_pending_dead(None)   # cancel the waiting dead key, nothing typed
+            return True
+        if pending is not None:
+            self._set_pending_dead(None)   # also removes the underlined preview
+            combo = self._dead_combos.get(pending, {}).get(key_code)
+            if combo:
+                if self.osk is not None and hasattr(self.osk, 'highlight_key'):
+                    self.osk.highlight_key(key_code)
+                insert(combo)
+                return True
+            own = self._glyph_for_key(pending)
+            if own:
+                insert(own)
+            if key_code == pending or key_code == " ":
+                return True    # same dead key twice, or Space: own glyph typed once
+            # no combination: own glyph already typed, now handle this key normally
+        if key_code in self._dead_keys:
+            self._set_pending_dead(key_code, target)
+            return True
+        glyph = self._glyph_for_key(key_code)
+        if glyph:
+            if self.osk is not None and hasattr(self.osk, 'highlight_key'):
+                self.osk.highlight_key(key_code)
+            insert(glyph)
+            return True
+        return False
+
+    def _on_osk_key_clicked(self, key_code: str, target=None) -> bool:
+        # called by the on-screen keyboard; True means the click was handled here
+        return self._handle_conlang_key(key_code, target)
 
     @staticmethod
     def _qkey_to_key_code(event) -> Optional[str]:
@@ -351,6 +473,12 @@ class MainWindow(QMainWindow):
             return chr(ord('a') + (key - Qt.Key.Key_A))
         if Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
             return chr(ord('0') + (key - Qt.Key.Key_0))
+        if key == Qt.Key.Key_Tab:
+            return "Tab"
+        if key == Qt.Key.Key_Shift:
+            return "Shift"
+        if key in (Qt.Key.Key_Alt, Qt.Key.Key_AltGr):
+            return "Alt"
         return None
 
     def _insert_into_focus(self, text: str):

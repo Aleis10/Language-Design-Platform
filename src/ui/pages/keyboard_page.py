@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QComboBox, QFrame,
-    QMessageBox, QScrollArea, QToolButton, QInputDialog, QApplication,
+    QMessageBox, QScrollArea, QToolButton, QInputDialog, QApplication, QCheckBox,
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QPainter
@@ -27,10 +27,11 @@ QWERTY_ROWS = [
     ["Tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"],
     ["Caps", "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "Enter"],
     ["Shift", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "Shift"],
-    ["      ", "      "],  # space row
+    ["Alt", "      ", "Alt"],  # bottom row: one space bar between the Alt keys
 ]
 
-NON_ASSIGNABLE = {"Tab", "Caps", "Shift", "Enter", "Backspace", " ", "      "}
+# the left and right Shift / Alt share one key code, so they are one key for mapping purposes
+NON_ASSIGNABLE = {"Caps", "Enter", "Backspace", " ", "      "}
 
 def _render_glyph_icon(svg_data: str, size: int = 40) -> Optional[QIcon]:
     if not svg_data or not svg_data.strip():
@@ -49,7 +50,8 @@ def _render_glyph_icon(svg_data: str, size: int = 40) -> Optional[QIcon]:
 
 class _AssignDialog(QDialog):
 
-    def __init__(self, parent=None, key_code: str = "", available_glyphs=None, current: Optional[dict] = None, font_mapping: Optional[Dict[str, int]] = None):
+    def __init__(self, parent=None, key_code: str = "", available_glyphs=None, current: Optional[dict] = None,
+                 font_mapping: Optional[Dict[str, int]] = None):
         super().__init__(parent)
         self.key_code = key_code
         self.setWindowTitle(f"Assign key: '{key_code}'")
@@ -94,6 +96,54 @@ class _AssignDialog(QDialog):
             "glyph_id": self.combo_glyph.currentData(),
         }
 
+class _ComboRow(QWidget):
+    # one dead key combination: [dead key] + [key to combine] = [result glyph]
+
+    def __init__(self, key_items, glyph_items, dead=None, base=None, glyph_id=None, parent=None):
+        super().__init__(parent)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        self.combo_dead = self._make_combo(key_items, "(choose key)", dead)
+        self.combo_base = self._make_combo(key_items, "(choose key)", base)
+        self.combo_result = self._make_combo(glyph_items, "(choose glyph)", glyph_id)
+        lay.addWidget(self.combo_dead, 1)
+        lay.addWidget(QLabel("+"))
+        lay.addWidget(self.combo_base, 1)
+        lay.addWidget(QLabel("="))
+        lay.addWidget(self.combo_result, 2)
+        self.btn_remove = QToolButton()
+        self.btn_remove.setText("✕")
+        self.btn_remove.setToolTip("Remove this combination")
+        lay.addWidget(self.btn_remove)
+
+    @staticmethod
+    def _make_combo(items, placeholder, selected):
+        # items: [(data, text, icon-or-None)]
+        combo = QComboBox()
+        combo.setIconSize(QSize(24, 24))
+        combo.setMinimumWidth(110)
+        combo.addItem(placeholder, None)
+        for data, text, icon in items:
+            combo.addItem(icon if icon else QIcon(), text, data)
+        if selected:
+            idx = combo.findData(selected)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        track_conlang_combo(combo, 12)   # conlang characters in names must not use the wrong font
+        return combo
+
+    def values(self):
+        return {
+            "dead_key_code": self.combo_dead.currentData(),
+            "base_key_code": self.combo_base.currentData(),
+            "result_glyph_id": self.combo_result.currentData(),
+        }
+
+    def connect_changed(self, slot):
+        for c in (self.combo_dead, self.combo_base, self.combo_result):
+            c.currentIndexChanged.connect(slot)
+
 class _PresetDialog(QDialog):
     def __init__(self, parent=None, name: str = ""):
         super().__init__(parent)
@@ -122,8 +172,10 @@ class KeyboardPage(QWidget):
         self.language_id = language_id
         self.data_dir = data_dir
         self._font_mapping = {}
-        self._key_buttons = {}  # key_code -> QPushButton
+        self._key_buttons = {}  # key_code -> [QPushButton]  (left and right Shift/Alt share a code)
         self._current_preset_id: Optional[str] = None
+        self._combo_rows = []   # _ComboRow widgets for the dead key section
+        self._combo_preset_id: Optional[str] = None   # preset the rows currently belong to
         self.on_saved = None  # MainWindow sets this to refresh Conlang mappings
         self._build_ui()
         self.load_presets()
@@ -224,8 +276,9 @@ class KeyboardPage(QWidget):
             for key in row:
                 btn = QToolButton() if key in NON_ASSIGNABLE else QPushButton()
                 btn.setMinimumHeight(44)
-                if key in NON_ASSIGNABLE or key in (" ", "      "):
-                    btn.setText("SPACE" if key in (" ", "      ") else key)
+                is_space = key in (" ", "      ")
+                if key in NON_ASSIGNABLE:
+                    btn.setText("SPACE" if is_space else key)
                     btn.setObjectName("KeyCapStatic")
                     btn.setEnabled(False)
                 else:
@@ -233,8 +286,8 @@ class KeyboardPage(QWidget):
                     btn.setObjectName("KeyCapEmpty")
                     btn.setProperty("keyCode", key)
                     btn.clicked.connect(self._on_key_clicked)
-                    self._key_buttons[key] = btn
-                row_layout.addWidget(btn)
+                    self._key_buttons.setdefault(key, []).append(btn)
+                row_layout.addWidget(btn, 8 if is_space else 1)
             self.grid.addLayout(row_layout)
         self.grid.addStretch()
 
@@ -243,6 +296,41 @@ class KeyboardPage(QWidget):
         scroll.setWidget(self.board_container)
         scroll.setObjectName("KbdScroll")
         body_layout.addWidget(scroll, stretch=1)
+
+        # dead key combinations: dead key + key to combine = result
+        combo_head = QHBoxLayout()
+        lbl_combo = QLabel("Dead key combinations")
+        lbl_combo.setObjectName("KbdSectionTitle")
+        combo_head.addWidget(lbl_combo)
+        combo_head.addStretch()
+        btn_add_combo = QPushButton("+ Add combination")
+        btn_add_combo.clicked.connect(lambda: self._add_combo_row())
+        combo_head.addWidget(btn_add_combo)
+        body_layout.addLayout(combo_head)
+
+        combo_hint = QLabel("Press the dead key, then the key to combine, to type the result. "
+                            "The dead key can be an empty key, or one with a glyph: the glyph shows "
+                            "underlined while it waits, and is typed on its own if no combination matches.")
+        combo_hint.setObjectName("KbdHint")
+        combo_hint.setWordWrap(True)
+        body_layout.addWidget(combo_hint)
+
+        self.combo_container = QWidget()
+        self.combo_container.setObjectName("KbdComboList")
+        self.combo_layout = QVBoxLayout(self.combo_container)
+        self.combo_layout.setContentsMargins(8, 8, 8, 8)
+        self.combo_layout.setSpacing(6)
+        self.lbl_combo_empty = QLabel("No combinations yet.")
+        self.lbl_combo_empty.setObjectName("KbdHint")
+        self.combo_layout.addWidget(self.lbl_combo_empty)
+        self.combo_layout.addStretch()
+        combo_scroll = QScrollArea()
+        combo_scroll.setWidgetResizable(True)
+        combo_scroll.setWidget(self.combo_container)
+        combo_scroll.setObjectName("KbdComboScroll")
+        combo_scroll.setMinimumHeight(130)
+        combo_scroll.setMaximumHeight(210)
+        body_layout.addWidget(combo_scroll)
         root.addWidget(body, stretch=1)
 
         self._load_stylesheet()
@@ -347,12 +435,15 @@ class KeyboardPage(QWidget):
             return
         res = QMessageBox.question(
             self, "Clear All Maps",
-            "Remove all keyboard mappings in this preset?",
+            "Remove all keyboard mappings and dead key combinations in this preset?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if res == QMessageBox.StandardButton.Yes:
             self.keyboard_repo.clear_all_mappings(self._current_preset_id)
+            self._combo_preset_id = None   # reload the (now empty) combination list
             self.refresh()
+            if callable(self.on_saved):
+                self.on_saved()
 
     def _save_and_rebuild(self):
         if not self._current_preset_id:
@@ -447,31 +538,135 @@ class KeyboardPage(QWidget):
             for m in self.keyboard_repo.get_all_mappings(self._current_preset_id)
         }
         mapped = 0
-        for key_code, btn in self._key_buttons.items():
+        for key_code, btns in self._key_buttons.items():
             m = mappings.get(key_code)
-            if m and (m.get("assignment") or m.get("glyph_id")):
+            is_mapped = bool(m and (m.get("assignment") or m.get("glyph_id")))
+            if is_mapped:
                 mapped += 1
-                self._set_key_style(btn, "KeyCapAssigned")
-                if m.get("glyph_id"):
-                    glyph = self.keyboard_repo.get_glyph(m["glyph_id"])
-                    icon = _render_glyph_icon(glyph.get("svg_data", ""), 32) if glyph else None
-                    if icon:
-                        btn.setIcon(icon)
-                        btn.setIconSize(QSize(32, 32))
-                        btn.setText("")  # show only the glyph icon
-                    else:
-                        btn.setText("glyph")
+            icon = None
+            if is_mapped and m.get("glyph_id"):
+                glyph = self.keyboard_repo.get_glyph(m["glyph_id"])
+                icon = _render_glyph_icon(glyph.get("svg_data", ""), 32) if glyph else None
+            for btn in btns:
+                if is_mapped:
+                    self._set_key_style(btn, "KeyCapAssigned")
+                    if m.get("glyph_id"):
+                        if icon:
+                            btn.setIcon(icon)
+                            btn.setIconSize(QSize(32, 32))
+                            btn.setText("")  # show only the glyph icon
+                        else:
+                            btn.setText("glyph")
+                            btn.setIcon(QIcon())
+                    elif m.get("assignment"):
+                        btn.setText(m["assignment"])
                         btn.setIcon(QIcon())
-                elif m.get("assignment"):
-                    btn.setText(m["assignment"])
+                    btn.setToolTip(
+                        f"key '{key_code}' → {m.get('assignment') or 'glyph'}"
+                        + (f"  {m.get('ppua')}" if m.get("ppua") else "")
+                    )
+                else:
+                    self._set_key_style(btn, "KeyCapEmpty")
+                    btn.setText(key_code)
                     btn.setIcon(QIcon())
-                btn.setToolTip(
-                    f"key '{key_code}' → {m.get('assignment') or 'glyph'}"
-                    + (f"  {m.get('ppua')}" if m.get("ppua") else "")
-                )
-            else:
-                self._set_key_style(btn, "KeyCapEmpty")
-                btn.setText(key_code)
-                btn.setIcon(QIcon())
-                btn.setToolTip("")
+                    btn.setToolTip("")
         self.lbl_count.setText(f"{mapped} keys mapped")
+        self._rebuild_combo_rows()
+
+    # dead key combinations
+
+    def _combo_key_items(self, mappings):
+        # every assignable key: shown with its glyph when it has one, otherwise marked empty
+        items = []
+        seen = set()
+        for row in QWERTY_ROWS:
+            for key in row:
+                if key in NON_ASSIGNABLE or key.strip() == "" or key in seen:
+                    continue
+                seen.add(key)
+                m = mappings.get(key)
+                icon = None
+                text = f"{key}  (empty)"
+                if m and m.get("glyph_id"):
+                    glyph = self.keyboard_repo.get_glyph(m["glyph_id"])
+                    icon = _render_glyph_icon(glyph.get("svg_data", ""), 24) if glyph else None
+                    text = f"{key}" if icon else f"{key}  (glyph)"
+                elif m and m.get("assignment"):
+                    text = f"{key}  {m['assignment']}"
+                items.append((key, text, icon))
+        return items
+
+    def _combo_glyph_items(self):
+        items = []
+        for g in self.keyboard_repo.unassigned_glyphs(self.language_id):
+            name = g.get("name", "")
+            meaning = g.get("meaning", "")
+            label = f"{name} — {meaning}" if meaning else name
+            items.append((g.get("id"), label, _render_glyph_icon(g.get("svg_data", ""), 24)))
+        return items
+
+    def _collect_combo_state(self):
+        return [r.values() for r in self._combo_rows]
+
+    def _rebuild_combo_rows(self):
+        # rebuild from the screen when it is the same preset (keeps half filled rows), else from the DB
+        if not self._current_preset_id:
+            return
+        if self._combo_preset_id == self._current_preset_id:
+            state = self._collect_combo_state()
+        else:
+            state = [
+                {"dead_key_code": c["dead_key_code"], "base_key_code": c["base_key_code"],
+                 "result_glyph_id": c["result_glyph_id"]}
+                for c in self.keyboard_repo.get_dead_combos(self._current_preset_id)
+            ]
+        mappings = {m["key_code"]: m for m in self.keyboard_repo.get_all_mappings(self._current_preset_id)}
+        self._key_items = self._combo_key_items(mappings)
+        self._glyph_items = self._combo_glyph_items()
+        for r in self._combo_rows:
+            self.combo_layout.removeWidget(r)
+            r.setParent(None)
+            r.deleteLater()
+        self._combo_rows = []
+        self._combo_preset_id = self._current_preset_id
+        for v in state:
+            self._add_combo_row(v.get("dead_key_code"), v.get("base_key_code"),
+                                v.get("result_glyph_id"), save=False)
+        self._update_combo_empty_label()
+
+    def _add_combo_row(self, dead=None, base=None, glyph_id=None, save=True):
+        if not self._current_preset_id:
+            return
+        if not hasattr(self, "_key_items"):
+            self._rebuild_combo_rows()
+        row = _ComboRow(self._key_items, self._glyph_items, dead, base, glyph_id)
+        row.connect_changed(self._on_combos_changed)
+        row.btn_remove.clicked.connect(lambda _=False, r=row: self._remove_combo_row(r))
+        # keep the stretch and empty label at the end
+        self.combo_layout.insertWidget(len(self._combo_rows), row)
+        self._combo_rows.append(row)
+        self._update_combo_empty_label()
+        if save:
+            self._on_combos_changed()
+
+    def _remove_combo_row(self, row):
+        if row in self._combo_rows:
+            self._combo_rows.remove(row)
+        self.combo_layout.removeWidget(row)
+        row.setParent(None)
+        row.deleteLater()
+        self._update_combo_empty_label()
+        self._on_combos_changed()
+
+    def _update_combo_empty_label(self):
+        self.lbl_combo_empty.setVisible(not self._combo_rows)
+
+    def _on_combos_changed(self, *_):
+        # only complete rows are stored; half filled rows stay on screen until finished
+        if not self._current_preset_id:
+            return
+        complete = [v for v in self._collect_combo_state()
+                    if v["dead_key_code"] and v["base_key_code"] and v["result_glyph_id"]]
+        self.keyboard_repo.replace_all_dead_combos(self.language_id, self._current_preset_id, complete)
+        if callable(self.on_saved):
+            self.on_saved()

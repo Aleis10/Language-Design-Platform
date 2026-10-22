@@ -42,6 +42,20 @@ class KeyboardRepository:
                 );
             """)
 
+            # Dead key combinations: dead key + base key -> result glyph
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS keyboard_dead_combos (
+                    id TEXT PRIMARY KEY,
+                    preset_id TEXT NOT NULL,
+                    language_id TEXT NOT NULL,
+                    dead_key_code TEXT NOT NULL,
+                    base_key_code TEXT NOT NULL,
+                    result_glyph_id TEXT,
+                    FOREIGN KEY (preset_id) REFERENCES keyboard_presets (id) ON DELETE CASCADE,
+                    FOREIGN KEY (language_id) REFERENCES languages (id) ON DELETE CASCADE
+                );
+            """)
+
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_kb_preset_lang
                 ON keyboard_mappings(preset_id, key_code);
@@ -132,9 +146,9 @@ class KeyboardRepository:
 
     def delete_preset(self, preset_id: str):
         with self.db_manager.get_connection() as conn:
-            conn.cursor().execute(
-                "DELETE FROM keyboard_presets WHERE id = ?;", (preset_id,)
-            )
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM keyboard_dead_combos WHERE preset_id = ?;", (preset_id,))
+            cursor.execute("DELETE FROM keyboard_presets WHERE id = ?;", (preset_id,))
 
     def set_mapping(
         self,
@@ -217,9 +231,50 @@ class KeyboardRepository:
 
     def clear_all_mappings(self, preset_id: str):
         with self.db_manager.get_connection() as conn:
-            conn.cursor().execute(
+            cursor = conn.cursor()
+            cursor.execute(
                 "DELETE FROM keyboard_mappings WHERE preset_id = ?;", (preset_id,)
             )
+            cursor.execute(
+                "DELETE FROM keyboard_dead_combos WHERE preset_id = ?;", (preset_id,)
+            )
+
+    def get_dead_combos(self, preset_id: str, dead_key_code: Optional[str] = None) -> List[Dict[str, Any]]:
+        with self.db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            if dead_key_code is None:
+                cursor.execute(
+                    "SELECT * FROM keyboard_dead_combos WHERE preset_id = ? ORDER BY dead_key_code, base_key_code;",
+                    (preset_id,),
+                )
+            else:
+                cursor.execute(
+                    "SELECT * FROM keyboard_dead_combos WHERE preset_id = ? AND dead_key_code = ? ORDER BY base_key_code;",
+                    (preset_id, dead_key_code),
+                )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def replace_all_dead_combos(self, language_id: str, preset_id: str, combos: List[Dict[str, Any]]):
+        # combos: [{"dead_key_code", "base_key_code", "result_glyph_id"}]; replaces the whole preset's list
+        with self.db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM keyboard_dead_combos WHERE preset_id = ?;", (preset_id,))
+            seen = set()
+            for c in combos:
+                dead = c.get("dead_key_code")
+                base = c.get("base_key_code")
+                gid = c.get("result_glyph_id")
+                if not dead or not base or not gid or (dead, base) in seen:
+                    continue
+                seen.add((dead, base))
+                cursor.execute(
+                    """
+                    INSERT INTO keyboard_dead_combos (id, preset_id, language_id, dead_key_code,
+                                                      base_key_code, result_glyph_id)
+                    VALUES (?, ?, ?, ?, ?, ?);
+                    """,
+                    (str(uuid.uuid4()), preset_id, language_id, dead, base, gid),
+                )
 
     def unassigned_glyphs(self, language_id: str) -> List[Dict[str, Any]]:
         with self.db_manager.get_connection() as conn:
