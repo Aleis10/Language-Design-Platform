@@ -18,20 +18,20 @@ QLabel#TrStatus {
 }
 
 QLabel#TrSection {
-    color: #333333;
+    color: #ffffff;
     font-size: 12px;
     font-weight: bold;
     margin-top: 4px;
 }
 
 QLabel#TrHint {
-    color: #777777;
+    color: #ffffff;
     font-size: 11px;
     font-weight: normal;
 }
 
 QLabel#TrGloss {
-    color: #444444;
+    color: #ffffff;
     font-size: 13px;
     padding: 2px 2px;
 }
@@ -83,6 +83,9 @@ QDialog {
 }
 QDialog QLabel {
     color: #222222;
+}
+QDialog QLabel#TrHint {
+    color: #777777;
 }
 QDialog QLineEdit, QDialog QComboBox {
     background-color: #ffffff;

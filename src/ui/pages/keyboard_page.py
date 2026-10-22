@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QComboBox, QFrame,
-    QMessageBox, QScrollArea, QToolButton, QInputDialog, QApplication, QCheckBox,
+    QMessageBox, QScrollArea, QToolButton, QInputDialog, QApplication, QCheckBox, QSizePolicy,
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QPainter
@@ -31,7 +31,7 @@ QWERTY_ROWS = [
 ]
 
 # the left and right Shift / Alt share one key code, so they are one key for mapping purposes
-NON_ASSIGNABLE = {"Caps", "Enter", "Backspace", " ", "      "}
+NON_ASSIGNABLE = {"Enter", "Backspace", " ", "      "}
 
 def _render_glyph_icon(svg_data: str, size: int = 40) -> Optional[QIcon]:
     if not svg_data or not svg_data.strip():
@@ -96,26 +96,97 @@ class _AssignDialog(QDialog):
             "glyph_id": self.combo_glyph.currentData(),
         }
 
-class _ComboRow(QWidget):
-    # one dead key combination: [dead key] + [key to combine] = [result glyph]
+# plain names for what a trigger key does: (stored value, label, explanation)
+COMBO_MODE_ITEMS = [
+    ("once", "Once (dead key)",
+     "Press the trigger, release it, then press the key to combine. Works for that one key only."),
+    ("hold", "Hold",
+     "Keep the trigger pressed while you type. Every key you press meanwhile uses this layer."),
+    ("toggle", "Toggle (lock)",
+     "Press the trigger once to switch the layer on and again to switch it off, like Caps Lock."),
+]
+_MODE_WIDTH = 150
+_SYMBOL_WIDTH = 14
+_REMOVE_WIDTH = 28
 
-    def __init__(self, key_items, glyph_items, dead=None, base=None, glyph_id=None, parent=None):
+
+class _ComboHeader(QWidget):
+    # column titles; same layout as _ComboRow so every title sits above its dropdown
+
+    def __init__(self, parent=None):
         super().__init__(parent)
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
+
+        def title(text, tip=""):
+            lbl = QLabel(text)
+            lbl.setObjectName("KbdColTitle")
+            lbl.setToolTip(tip)
+            return lbl
+
+        mode = title("Mode", "How the trigger key behaves: once, hold or toggle")
+        mode.setFixedWidth(_MODE_WIDTH)
+        lay.addWidget(mode)
+        trigger = title("Trigger key", "The key you press first (dead key, held key or lock key)")
+        trigger.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        lay.addWidget(trigger, 1)
+        gap1 = QLabel("")
+        gap1.setFixedWidth(_SYMBOL_WIDTH)
+        lay.addWidget(gap1)
+        combine = title("Combine with", "The key you press together with, or after, the trigger")
+        combine.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        lay.addWidget(combine, 1)
+        gap2 = QLabel("")
+        gap2.setFixedWidth(_SYMBOL_WIDTH)
+        lay.addWidget(gap2)
+        result = title("Result", "The glyph that is typed")
+        result.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        lay.addWidget(result, 2)
+        end = QLabel("")
+        end.setFixedWidth(_REMOVE_WIDTH)
+        lay.addWidget(end)
+
+
+class _ComboRow(QWidget):
+    # one combination: [mode] [trigger key] + [key to combine] = [result glyph]
+
+    def __init__(self, key_items, glyph_items, mode="once", dead=None, base=None, glyph_id=None, parent=None):
+        super().__init__(parent)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+
+        self.combo_mode = QComboBox()
+        self.combo_mode.setFixedWidth(_MODE_WIDTH)
+        for i, (value, label, tip) in enumerate(COMBO_MODE_ITEMS):
+            self.combo_mode.addItem(label, value)
+            self.combo_mode.setItemData(i, tip, Qt.ItemDataRole.ToolTipRole)
+        idx = self.combo_mode.findData(mode)
+        self.combo_mode.setCurrentIndex(idx if idx >= 0 else 0)
+
         self.combo_dead = self._make_combo(key_items, "(choose key)", dead)
         self.combo_base = self._make_combo(key_items, "(choose key)", base)
         self.combo_result = self._make_combo(glyph_items, "(choose glyph)", glyph_id)
+
+        lay.addWidget(self.combo_mode)
         lay.addWidget(self.combo_dead, 1)
-        lay.addWidget(QLabel("+"))
+        lay.addWidget(self._symbol("+"))
         lay.addWidget(self.combo_base, 1)
-        lay.addWidget(QLabel("="))
+        lay.addWidget(self._symbol("="))
         lay.addWidget(self.combo_result, 2)
         self.btn_remove = QToolButton()
         self.btn_remove.setText("✕")
         self.btn_remove.setToolTip("Remove this combination")
+        self.btn_remove.setFixedWidth(_REMOVE_WIDTH)
         lay.addWidget(self.btn_remove)
+
+    @staticmethod
+    def _symbol(text):
+        lbl = QLabel(text)
+        lbl.setFixedWidth(_SYMBOL_WIDTH)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        return lbl
 
     @staticmethod
     def _make_combo(items, placeholder, selected):
@@ -123,6 +194,8 @@ class _ComboRow(QWidget):
         combo = QComboBox()
         combo.setIconSize(QSize(24, 24))
         combo.setMinimumWidth(110)
+        # width comes only from the stretch factor, so it lines up with the column title above
+        combo.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         combo.addItem(placeholder, None)
         for data, text, icon in items:
             combo.addItem(icon if icon else QIcon(), text, data)
@@ -133,15 +206,30 @@ class _ComboRow(QWidget):
         track_conlang_combo(combo, 12)   # conlang characters in names must not use the wrong font
         return combo
 
+    def mode(self):
+        return self.combo_mode.currentData() or "once"
+
+    def trigger(self):
+        return self.combo_dead.currentData()
+
+    def set_mode(self, mode):
+        idx = self.combo_mode.findData(mode)
+        if idx >= 0 and idx != self.combo_mode.currentIndex():
+            self.combo_mode.blockSignals(True)
+            self.combo_mode.setCurrentIndex(idx)
+            self.combo_mode.blockSignals(False)
+
     def values(self):
         return {
+            "mode": self.mode(),
             "dead_key_code": self.combo_dead.currentData(),
             "base_key_code": self.combo_base.currentData(),
             "result_glyph_id": self.combo_result.currentData(),
         }
 
     def connect_changed(self, slot):
-        for c in (self.combo_dead, self.combo_base, self.combo_result):
+        # base key and result: they never affect other rows
+        for c in (self.combo_base, self.combo_result):
             c.currentIndexChanged.connect(slot)
 
 class _PresetDialog(QDialog):
@@ -287,7 +375,12 @@ class KeyboardPage(QWidget):
                     btn.setProperty("keyCode", key)
                     btn.clicked.connect(self._on_key_clicked)
                     self._key_buttons.setdefault(key, []).append(btn)
-                row_layout.addWidget(btn, 8 if is_space else 1)
+                if row in (QWERTY_ROWS[3], QWERTY_ROWS[4]):
+                    # Shift row and bottom row: width comes only from the stretch factors, so
+                    # an Alt key is exactly as wide as a Shift key and the space bar fills the gap
+                    btn.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+                    btn.setMinimumWidth(48)
+                row_layout.addWidget(btn, 10 if is_space else 1)
             self.grid.addLayout(row_layout)
         self.grid.addStretch()
 
@@ -295,11 +388,12 @@ class KeyboardPage(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.board_container)
         scroll.setObjectName("KbdScroll")
+        scroll.setMinimumHeight(280)
         body_layout.addWidget(scroll, stretch=1)
 
         # dead key combinations: dead key + key to combine = result
         combo_head = QHBoxLayout()
-        lbl_combo = QLabel("Dead key combinations")
+        lbl_combo = QLabel("Key combinations")
         lbl_combo.setObjectName("KbdSectionTitle")
         combo_head.addWidget(lbl_combo)
         combo_head.addStretch()
@@ -308,9 +402,10 @@ class KeyboardPage(QWidget):
         combo_head.addWidget(btn_add_combo)
         body_layout.addLayout(combo_head)
 
-        combo_hint = QLabel("Press the dead key, then the key to combine, to type the result. "
-                            "The dead key can be an empty key, or one with a glyph: the glyph shows "
-                            "underlined while it waits, and is typed on its own if no combination matches.")
+        combo_hint = QLabel("Choose a mode, the trigger key, the key to combine with, and the result.  "
+                            "Once: press the trigger, then the key.  Hold: keep the trigger pressed while "
+                            "you type.  Toggle: press once to switch on, again to switch off (like Caps Lock).  "
+                            "A trigger key can be empty or have its own glyph.")
         combo_hint.setObjectName("KbdHint")
         combo_hint.setWordWrap(True)
         body_layout.addWidget(combo_hint)
@@ -320,6 +415,7 @@ class KeyboardPage(QWidget):
         self.combo_layout = QVBoxLayout(self.combo_container)
         self.combo_layout.setContentsMargins(8, 8, 8, 8)
         self.combo_layout.setSpacing(6)
+        self.combo_layout.addWidget(_ComboHeader())      # column titles stay above the rows
         self.lbl_combo_empty = QLabel("No combinations yet.")
         self.lbl_combo_empty.setObjectName("KbdHint")
         self.combo_layout.addWidget(self.lbl_combo_empty)
@@ -328,9 +424,8 @@ class KeyboardPage(QWidget):
         combo_scroll.setWidgetResizable(True)
         combo_scroll.setWidget(self.combo_container)
         combo_scroll.setObjectName("KbdComboScroll")
-        combo_scroll.setMinimumHeight(130)
-        combo_scroll.setMaximumHeight(210)
-        body_layout.addWidget(combo_scroll)
+        combo_scroll.setMinimumHeight(200)
+        body_layout.addWidget(combo_scroll, stretch=2)
         root.addWidget(body, stretch=1)
 
         self._load_stylesheet()
@@ -360,12 +455,16 @@ class KeyboardPage(QWidget):
     def _switch_preset(self, preset_id: Optional[str]):
         self._current_preset_id = preset_id
         self.refresh()
+        if callable(self.on_saved):
+            self.on_saved()   # typing and the on-screen keyboard follow the selected preset
 
     def _on_preset_changed(self):
         preset_id = self.combo_presets.currentData()
         if preset_id:
             self._current_preset_id = preset_id
             self.refresh()
+            if callable(self.on_saved):
+                self.on_saved()
 
     def _add_preset(self):
         dlg = _PresetDialog(self)
@@ -616,8 +715,8 @@ class KeyboardPage(QWidget):
             state = self._collect_combo_state()
         else:
             state = [
-                {"dead_key_code": c["dead_key_code"], "base_key_code": c["base_key_code"],
-                 "result_glyph_id": c["result_glyph_id"]}
+                {"mode": c.get("mode") or "once", "dead_key_code": c["dead_key_code"],
+                 "base_key_code": c["base_key_code"], "result_glyph_id": c["result_glyph_id"]}
                 for c in self.keyboard_repo.get_dead_combos(self._current_preset_id)
             ]
         mappings = {m["key_code"]: m for m in self.keyboard_repo.get_all_mappings(self._current_preset_id)}
@@ -631,19 +730,21 @@ class KeyboardPage(QWidget):
         self._combo_preset_id = self._current_preset_id
         for v in state:
             self._add_combo_row(v.get("dead_key_code"), v.get("base_key_code"),
-                                v.get("result_glyph_id"), save=False)
+                                v.get("result_glyph_id"), v.get("mode") or "once", save=False)
         self._update_combo_empty_label()
 
-    def _add_combo_row(self, dead=None, base=None, glyph_id=None, save=True):
+    def _add_combo_row(self, dead=None, base=None, glyph_id=None, mode="once", save=True):
         if not self._current_preset_id:
             return
         if not hasattr(self, "_key_items"):
             self._rebuild_combo_rows()
-        row = _ComboRow(self._key_items, self._glyph_items, dead, base, glyph_id)
+        row = _ComboRow(self._key_items, self._glyph_items, mode, dead, base, glyph_id)
         row.connect_changed(self._on_combos_changed)
+        row.combo_mode.currentIndexChanged.connect(lambda _=0, r=row: self._on_mode_changed(r))
+        row.combo_dead.currentIndexChanged.connect(lambda _=0, r=row: self._on_trigger_changed(r))
         row.btn_remove.clicked.connect(lambda _=False, r=row: self._remove_combo_row(r))
-        # keep the stretch and empty label at the end
-        self.combo_layout.insertWidget(len(self._combo_rows), row)
+        # rows go after the column titles and before the empty label and the stretch
+        self.combo_layout.insertWidget(1 + len(self._combo_rows), row)
         self._combo_rows.append(row)
         self._update_combo_empty_label()
         if save:
@@ -656,6 +757,25 @@ class KeyboardPage(QWidget):
         row.setParent(None)
         row.deleteLater()
         self._update_combo_empty_label()
+        self._on_combos_changed()
+
+    def _on_mode_changed(self, row):
+        # one trigger key has one mode, so the other rows with the same trigger follow this row
+        trigger = row.trigger()
+        if trigger:
+            for other in self._combo_rows:
+                if other is not row and other.trigger() == trigger:
+                    other.set_mode(row.mode())
+        self._on_combos_changed()
+
+    def _on_trigger_changed(self, row):
+        # a trigger that is already used keeps the mode it already has
+        trigger = row.trigger()
+        if trigger:
+            for other in self._combo_rows:
+                if other is not row and other.trigger() == trigger:
+                    row.set_mode(other.mode())
+                    break
         self._on_combos_changed()
 
     def _update_combo_empty_label(self):

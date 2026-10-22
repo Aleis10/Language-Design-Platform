@@ -5,6 +5,10 @@ try:
 except ImportError:
     from .db_Manager import Database_Manager
 
+# how a trigger key behaves: once = next key only (dead key), hold = while pressed, toggle = on/off
+COMBO_MODES = ("once", "hold", "toggle")
+
+
 class KeyboardRepository:
     def __init__(self, db_manager: Database_Manager):
         self.db_manager = db_manager
@@ -51,10 +55,17 @@ class KeyboardRepository:
                     dead_key_code TEXT NOT NULL,
                     base_key_code TEXT NOT NULL,
                     result_glyph_id TEXT,
+                    mode TEXT NOT NULL DEFAULT 'once',
                     FOREIGN KEY (preset_id) REFERENCES keyboard_presets (id) ON DELETE CASCADE,
                     FOREIGN KEY (language_id) REFERENCES languages (id) ON DELETE CASCADE
                 );
             """)
+            # older projects: add the mode column (once = the original dead key behaviour)
+            cursor.execute("PRAGMA table_info(keyboard_dead_combos);")
+            if "mode" not in {r[1] for r in cursor.fetchall()}:
+                cursor.execute(
+                    "ALTER TABLE keyboard_dead_combos ADD COLUMN mode TEXT NOT NULL DEFAULT 'once';"
+                )
 
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_kb_preset_lang
@@ -255,11 +266,13 @@ class KeyboardRepository:
             return [dict(row) for row in cursor.fetchall()]
 
     def replace_all_dead_combos(self, language_id: str, preset_id: str, combos: List[Dict[str, Any]]):
-        # combos: [{"dead_key_code", "base_key_code", "result_glyph_id"}]; replaces the whole preset's list
+        # combos: [{"dead_key_code", "base_key_code", "result_glyph_id", "mode"}]
+        # mode is "once" (dead key), "hold" or "toggle"; one trigger key has one mode
         with self.db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM keyboard_dead_combos WHERE preset_id = ?;", (preset_id,))
             seen = set()
+            trigger_mode: Dict[str, str] = {}
             for c in combos:
                 dead = c.get("dead_key_code")
                 base = c.get("base_key_code")
@@ -267,13 +280,15 @@ class KeyboardRepository:
                 if not dead or not base or not gid or (dead, base) in seen:
                     continue
                 seen.add((dead, base))
+                mode = c.get("mode") if c.get("mode") in COMBO_MODES else "once"
+                mode = trigger_mode.setdefault(dead, mode)   # first row decides for this trigger key
                 cursor.execute(
                     """
                     INSERT INTO keyboard_dead_combos (id, preset_id, language_id, dead_key_code,
-                                                      base_key_code, result_glyph_id)
-                    VALUES (?, ?, ?, ?, ?, ?);
+                                                      base_key_code, result_glyph_id, mode)
+                    VALUES (?, ?, ?, ?, ?, ?, ?);
                     """,
-                    (str(uuid.uuid4()), preset_id, language_id, dead, base, gid),
+                    (str(uuid.uuid4()), preset_id, language_id, dead, base, gid, mode),
                 )
 
     def unassigned_glyphs(self, language_id: str) -> List[Dict[str, Any]]:

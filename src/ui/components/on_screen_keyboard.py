@@ -4,24 +4,53 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QGridLayout, QPushButton, QLabel, QToolButton,
     QVBoxLayout, QHBoxLayout, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox,
 )
-from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, Signal, QTimer, QSize, QPointF
+from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPen, QColor, QPolygonF
 
 from digital_keyboard import (
-    glyph_character, register_language_font, has_ppua, track_conlang_widget,
+    glyph_character, register_language_font, has_ppua, track_conlang_widget, track_conlang_combo,
 )
 
 
 QWERTY_ROWS = [
     ["`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="],
     ["Tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"],
-    ["a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'"],
+    ["Caps", "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'"],
     ["Shift", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/"],
     ["Alt", " "],
 ]
 
 # keys that only act when they are mapped (or used in a dead key combination)
-SPECIAL_KEYS = ("Tab", "Shift", "Alt")
+SPECIAL_KEYS = ("Tab", "Caps", "Shift", "Alt")
+
+# key sizes (bigger keys make the keyboard easier to hit and the glyphs easier to read)
+KEY_HEIGHT = 48
+KEY_WIDTH = 54
+SPECIAL_KEY_WIDTH = 74
+GLYPH_POINT_SIZE = 22
+TEXT_POINT_SIZE = 13
+
+
+def _backspace_icon(size: int = 30) -> QIcon:
+    # drawn with QPainter so it does not depend on a font having the backspace symbol
+    scale = 2
+    pm = QPixmap(size * scale, size * scale)
+    pm.setDevicePixelRatio(scale)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    k = size / 30.0
+    pen = QPen(QColor("#333333"))
+    pen.setWidthF(2.2 * k)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.drawPolygon(QPolygonF([QPointF(3 * k, 15 * k), QPointF(10 * k, 5 * k), QPointF(27 * k, 5 * k),
+                             QPointF(27 * k, 25 * k), QPointF(10 * k, 25 * k)]))
+    p.drawLine(QPointF(15 * k, 11 * k), QPointF(21 * k, 19 * k))
+    p.drawLine(QPointF(21 * k, 11 * k), QPointF(15 * k, 19 * k))
+    p.end()
+    return QIcon(pm)
 
 _TEXT_WIDGETS = (QLineEdit, QTextEdit, QPlainTextEdit)
 
@@ -72,6 +101,7 @@ class OnScreenKeyboard(QWidget):
     """On-screen keyboard that inserts mapped characters/glyphs."""
 
     closed = Signal()
+    preset_changed = Signal(str)   # user picked another preset in the dropdown
 
     def __init__(
         self,
@@ -90,7 +120,9 @@ class OnScreenKeyboard(QWidget):
         self._key_buttons: Dict[str, QPushButton] = {}
         self._last_target: Optional[QWidget] = None   # last text field the user was in
         self.key_handler = None                       # MainWindow sets this: handles dead keys
-        self._pending_dead_key: Optional[str] = None
+        self._pending_dead_key: Optional[str] = None  # a "once" key waiting for its partner (amber)
+        self._active_keys: set = set()                # held / toggled trigger keys (green)
+        self._overlay: Dict[str, str] = {}            # key -> character typed in the active layer
 
         # title bar with minimize + close only (no maximize), always on top
         self.setWindowFlags(
@@ -183,7 +215,7 @@ class OnScreenKeyboard(QWidget):
 
     def _get_key_text(self, key: str) -> tuple[str, str]:
         mapping = self._mappings.get(key)
-        char = (mapping or {}).get("char", "")
+        char = self._overlay.get(key) or (mapping or {}).get("char", "")
         if char:
             return char, char
         return key, key
@@ -194,11 +226,20 @@ class OnScreenKeyboard(QWidget):
         btn.setText("Space" if key == " " and display == " " else display)
         btn.setProperty("insert_text", insert)
         if has_ppua(insert):
-            track_conlang_widget(btn, 16)   # conlang first, UI fallback; follows font rebuilds
+            btn.setProperty("cl_tracked", True)
+            track_conlang_widget(btn, GLYPH_POINT_SIZE)   # conlang first, UI fallback; follows font rebuilds
+        elif btn.property("cl_tracked"):
+            track_conlang_widget(btn, TEXT_POINT_SIZE)    # was a glyph key: keep the font guard, plain size
         else:
             f = QFont(self.font())
-            f.setPointSize(10)
+            f.setPointSize(TEXT_POINT_SIZE)
             btn.setFont(f)
+        if key == self._pending_dead_key:
+            btn.setStyleSheet("background: #e6a100; color: black;")
+        elif key in self._active_keys:
+            btn.setStyleSheet("background: #2e9d4f; color: white;")
+        else:
+            btn.setStyleSheet("")
 
     def _build_ui(self):
         self.setObjectName("OSKRoot")
@@ -212,6 +253,14 @@ class OnScreenKeyboard(QWidget):
         lbl.setObjectName("OSKTitle")
         header.addWidget(lbl)
         header.addStretch()
+        self.combo_presets = QComboBox()
+        self.combo_presets.setObjectName("OSKPresets")
+        self.combo_presets.setMinimumWidth(130)
+        self.combo_presets.setFocusPolicy(Qt.FocusPolicy.NoFocus)   # do not steal focus from the field
+        self.combo_presets.setToolTip("Keyboard preset")
+        track_conlang_combo(self.combo_presets, 11)
+        self.combo_presets.currentIndexChanged.connect(self._on_preset_picked)
+        header.addWidget(self.combo_presets)
         root.addLayout(header)
 
         hint = QLabel("Click to insert mapped characters into focused field.")
@@ -224,25 +273,29 @@ class OnScreenKeyboard(QWidget):
         grid.setContentsMargins(0, 0, 0, 0)
 
         row = 0
+        total_cols = max(len(r) for r in QWERTY_ROWS)
         for keys in QWERTY_ROWS:
             for col, key in enumerate(keys):
                 btn = QPushButton()
                 btn.setObjectName(f"Key_{key}")
-                btn.setMinimumHeight(34)
-                btn.setMinimumWidth(52 if key in SPECIAL_KEYS else 40)
+                btn.setMinimumHeight(KEY_HEIGHT)
+                btn.setMinimumWidth(SPECIAL_KEY_WIDTH if key in SPECIAL_KEYS else KEY_WIDTH)
                 btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
                 btn.clicked.connect(lambda _checked=False, b=btn: self._insert_from_button(b))
                 self._style_key(btn, key)
                 if key == " ":
-                    grid.addWidget(btn, row, col, 1, 8)    # space bar after the Alt key
+                    grid.addWidget(btn, row, col, 1, total_cols - col)   # space bar fills the rest of the row
                 else:
                     grid.addWidget(btn, row, col)
                 self._key_buttons[key] = btn
             row += 1
 
-        backspace_btn = QPushButton("⌫ Backspace")
+        backspace_btn = QPushButton()
         backspace_btn.setObjectName("Key_Backspace")
-        backspace_btn.setMinimumHeight(34)
+        backspace_btn.setIcon(_backspace_icon(30))
+        backspace_btn.setIconSize(QSize(30, 30))
+        backspace_btn.setToolTip("Backspace")
+        backspace_btn.setMinimumHeight(KEY_HEIGHT)
         backspace_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         backspace_btn.clicked.connect(self._backspace)
         grid.addWidget(backspace_btn, row, 0, 1, 4)
@@ -252,20 +305,37 @@ class OnScreenKeyboard(QWidget):
         root.setSizeConstraint(QVBoxLayout.SizeConstraint.SetFixedSize)
         self.setStyleSheet(self._qss())
 
-    def set_pending_dead(self, key_code: Optional[str]):
-        # keep the waiting dead key lit until its partner key is pressed
-        old = self._pending_dead_key
-        self._pending_dead_key = key_code
-        if old and old in self._key_buttons:
-            self._key_buttons[old].setStyleSheet("")
-        if key_code and key_code in self._key_buttons:
-            self._key_buttons[key_code].setStyleSheet("background: #e6a100; color: black;")
+    def set_presets(self, presets, current_id: Optional[str]):
+        # presets: [(id, name)]; refreshes the dropdown without firing preset_changed
+        self.combo_presets.blockSignals(True)
+        self.combo_presets.clear()
+        for pid, name in presets:
+            self.combo_presets.addItem(name, pid)
+        idx = self.combo_presets.findData(current_id) if current_id else -1
+        if idx >= 0:
+            self.combo_presets.setCurrentIndex(idx)
+        self.combo_presets.blockSignals(False)
+
+    def _on_preset_picked(self, _index: int):
+        pid = self.combo_presets.currentData()
+        if pid:
+            self.preset_changed.emit(str(pid))
+
+    def set_layer_state(self, overlay: Dict[str, str], active_keys, pending: Optional[str]):
+        # overlay: what each key types in the active layer; active_keys: held / toggled triggers (green);
+        # pending: a "once" key waiting for the next key (amber)
+        self._overlay = dict(overlay or {})
+        self._active_keys = set(active_keys or ())
+        self._pending_dead_key = pending
+        for key, btn in self._key_buttons.items():
+            if key != "Backspace":
+                self._style_key(btn, key)
 
     def highlight_key(self, key_code: str):
         btn = self._key_buttons.get(key_code)
         if btn:
             btn.setStyleSheet("background: #007acc; color: white;")
-            QTimer.singleShot(150, lambda: btn.setStyleSheet(""))
+            QTimer.singleShot(150, lambda: self._style_key(btn, key_code))
 
     # ---- typing ----------------------------------------------------------
 
@@ -328,4 +398,12 @@ class OnScreenKeyboard(QWidget):
             padding: 2px;
         }
         QPushButton:hover { background: #eef4fd; border-color: #007acc; }
+        QComboBox#OSKPresets {
+            background: #ffffff; color: #111111;
+            border: 1px solid #c8c8c8; border-radius: 5px; padding: 2px 6px;
+        }
+        QComboBox#OSKPresets QAbstractItemView {
+            background: #ffffff; color: #111111;
+            selection-background-color: #007acc; selection-color: #ffffff;
+        }
         """

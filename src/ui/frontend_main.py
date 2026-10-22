@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QFileDialog, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox,
     QPushButton, QTableWidget, QTableView, QApplication, QDialog,
 )
-from PySide6.QtGui import QAction, QKeySequence, QFont, QShortcut, QKeyEvent, QInputMethodEvent, QTextCharFormat
+from PySide6.QtGui import QAction, QKeySequence, QFont, QShortcut, QKeyEvent, QInputMethodEvent, QTextCharFormat, QGuiApplication
 from PySide6.QtCore import Qt, QEvent, QObject, Signal, QTimer
 from .components.coll_sidebar import Sidebar
 from .components.dark_file_dialog import open_dark_dialog
@@ -225,23 +225,63 @@ class MainWindow(QMainWindow):
         self.osk.closed.connect(self._on_osk_closed)
         self.osk.destroyed.connect(self._on_osk_destroyed)
         self.osk.key_handler = self._on_osk_key_clicked
-        self._pending_dead = None
+        self.osk.preset_changed.connect(self._on_osk_preset_selected)
+        self._clear_layer_state()
+        self._sync_osk_presets()
         self._set_kbd_button_checked(True)
+        self.osk.adjustSize()
+        self._position_osk()          # place before showing, then again once the window frame exists
         self.osk.show()
-        self._position_osk()
+        QTimer.singleShot(0, self._position_osk)
+        QTimer.singleShot(150, self._position_osk)
+        if QGuiApplication.platformName().startswith("wayland") and not getattr(self, "_wayland_note", False):
+            self._wayland_note = True
+            self.statusBar().showMessage(
+                "Wayland does not let apps choose a window's position. Start the app with "
+                "QT_QPA_PLATFORM=xcb to place the keyboard bottom-right.", 9000)
 
     def _position_osk(self):
+        # bottom-right corner of the main window, kept inside the screen
         if self.osk is None:
             return
-        parent_pos = self.mapToGlobal(self.rect().bottomRight())
-        x = parent_pos.x() - self.osk.width() - 24
-        y = parent_pos.y() - self.osk.height() - 76
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen else None
+        frame = self.osk.frameGeometry()   # includes the title bar once the window is shown
+        w, h = frame.width(), frame.height()
+        corner = self.mapToGlobal(self.rect().bottomRight())
+        x = corner.x() - w - 24
+        y = corner.y() - h - 40
+        if avail is not None:
+            x = max(avail.left(), min(x, avail.right() - w))
+            y = max(avail.top(), min(y, avail.bottom() - h))
         self.osk.move(x, y)
+
+    def _sync_osk_presets(self):
+        # keep the keyboard's preset dropdown in step with the Keyboard page
+        if self.osk is None or not self.keyboard_repo or not self.language_id:
+            return
+        try:
+            presets = self.keyboard_repo.get_presets(self.language_id)
+        except Exception:
+            return
+        page = getattr(self, "keyboard_page", None)
+        current = getattr(page, "_current_preset_id", None) or (presets[0]["id"] if presets else None)
+        self.osk.set_presets([(p["id"], p["name"]) for p in presets], current)
+
+    def _on_osk_preset_selected(self, preset_id: str):
+        page = getattr(self, "keyboard_page", None)
+        if page is None:
+            return
+        idx = page.combo_presets.findData(preset_id)
+        if idx >= 0 and idx != page.combo_presets.currentIndex():
+            page.combo_presets.setCurrentIndex(idx)   # page reloads and calls _reload_conlang_mappings
+        else:
+            self._reload_conlang_mappings()
 
     def _close_osk(self):
         osk = self.osk
         self.osk = None
-        self._pending_dead = None
+        self._clear_layer_state()
         if osk is not None:
             try:
                 osk.close()
@@ -251,7 +291,7 @@ class MainWindow(QMainWindow):
 
     def _on_osk_closed(self):
         self.osk = None
-        self._pending_dead = None
+        self._clear_layer_state()
         self._set_kbd_button_checked(False)
 
     def _on_osk_destroyed(self, *_):
@@ -259,17 +299,19 @@ class MainWindow(QMainWindow):
         self.osk = None
         self._set_kbd_button_checked(False)
 
-    # dead key state: key waiting for its partner, keys used as dead keys, dead_key -> {base_key: char}
-    _pending_dead: Optional[str] = None
-    _dead_keys: set = set()
-    _dead_combos: Dict[str, Dict[str, str]] = {}
+    # trigger key state. The lists are never changed in place, always replaced.
+    _pending_dead: Optional[str] = None            # "once" key waiting for its partner
+    _held_keys: list = []                          # "hold" keys currently pressed
+    _toggled_keys: list = []                       # "toggle" keys currently switched on
+    _trigger_modes: Dict[str, str] = {}            # trigger key -> once | hold | toggle
+    _dead_combos: Dict[str, Dict[str, str]] = {}   # trigger key -> {key: result character}
     _preedit_widget = None
 
     def _reload_conlang_mappings(self):
         mappings: Dict[str, Dict] = {}
         dead_combos: Dict[str, Dict[str, str]] = {}
-        dead_keys: set = set()
-        self._set_pending_dead(None)
+        trigger_modes: Dict[str, str] = {}
+        self._reset_layers()
         if self.keyboard_repo and self.language_id:
             try:
                 from digital_keyboard import glyph_character, register_language_font
@@ -309,7 +351,8 @@ class MainWindow(QMainWindow):
                 preset_for_combos = active_preset or (presets[0]["id"] if not active_preset and presets else None)
                 if preset_for_combos:
                     for c in self.keyboard_repo.get_dead_combos(preset_for_combos):
-                        dead_keys.add(c["dead_key_code"])   # a dead key even if its glyph is not built yet
+                        # a trigger key even if its glyph is not built yet; one mode per trigger
+                        trigger_modes.setdefault(c["dead_key_code"], c.get("mode") or "once")
                         gid = c.get("result_glyph_id")
                         gchar = glyph_character(self.session_dir, gid) if gid and self.session_dir else ""
                         if gchar:
@@ -319,10 +362,12 @@ class MainWindow(QMainWindow):
                 mappings = {}
         self._glyph_mappings = mappings
         self._dead_combos = dead_combos
-        self._dead_keys = dead_keys
+        self._trigger_modes = trigger_modes
         print(f"[DEBUG-kbd2] Reloaded {len(mappings)} key mappings, {sum(len(v) for v in dead_combos.values())} dead combinations")
         if getattr(self, 'osk', None) is not None:
             self.osk.set_mappings(mappings)
+            self._refresh_osk_layer()
+            self._sync_osk_presets()
 
     def _glyph_for_key(self, key_code: str) -> Optional[str]:
         m = self._glyph_mappings.get(key_code)
@@ -352,29 +397,94 @@ class MainWindow(QMainWindow):
                 and isinstance(obj, QDialog) and obj.isModal() \
                 and obj is not self.osk and not self.osk.isAncestorOf(obj):
             self._close_osk()
-        if event.type() == QEvent.Type.KeyPress and self.osk is not None \
-                and not event.isAutoRepeat() \
-                and (event.key() in (Qt.Key.Key_Alt, Qt.Key.Key_AltGr)
-                     or not (event.modifiers() & (Qt.KeyboardModifier.ControlModifier
-                                                  | Qt.KeyboardModifier.AltModifier
-                                                  | Qt.KeyboardModifier.MetaModifier))):
-            if self._pending_dead is not None and self._cancel_or_flush_dead(event):
-                return True
+        # a held key must not stay "down" when the app loses focus (its release goes elsewhere)
+        if et == QEvent.Type.ApplicationDeactivate and self._held_keys:
+            self._held_keys = []
+            self._refresh_osk_layer()
+        if et in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease) and self.osk is not None:
             key_code = self._qkey_to_key_code(event)
-            if key_code and self._handle_conlang_key(key_code):
-                return True  # swallow the original key
+            is_trigger = bool(key_code) and key_code in self._trigger_modes
+            if et == QEvent.Type.KeyRelease:
+                if is_trigger and not event.isAutoRepeat() and self._release_layer_key(key_code):
+                    return True
+            else:
+                mods = event.modifiers()
+                ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
+                meta = bool(mods & Qt.KeyboardModifier.MetaModifier)
+                alt = bool(mods & Qt.KeyboardModifier.AltModifier)
+                # the Alt key press itself, or a key typed while Alt is a held trigger, carries Alt
+                if alt and (key_code == "Alt" or "Alt" in self._held_keys):
+                    alt = False
+                if not (ctrl or meta or alt):
+                    if event.isAutoRepeat() and is_trigger:
+                        return True   # holding a trigger key must not repeat it
+                    if self._pending_dead is not None and self._cancel_or_flush_dead(event):
+                        return True
+                    if key_code and self._handle_conlang_key(key_code):
+                        return True  # swallow the original key
         return super().eventFilter(obj, event)
 
     def _set_pending_dead(self, key_code: Optional[str], target=None):
-        # the waiting dead key: lit on the OSK, and its glyph (if any) shown underlined in the field
+        # the waiting "once" key: lit on the OSK, and its glyph (if any) shown underlined in the field
         self._clear_preedit()
         self._pending_dead = key_code
-        if getattr(self, 'osk', None) is not None and hasattr(self.osk, 'set_pending_dead'):
-            self.osk.set_pending_dead(key_code)
-        if key_code:
+        self._refresh_osk_layer()
+        if key_code and self._trigger_modes.get(key_code, "once") == "once":
             own = self._glyph_for_key(key_code)
             if own:
                 self._show_preedit(own, target)
+
+    def _clear_layer_state(self):
+        # forget every waiting, held and toggled trigger (no OSK refresh; used when it closes)
+        self._clear_preedit()
+        self._pending_dead = None
+        self._held_keys = []
+        self._toggled_keys = []
+
+    def _reset_layers(self):
+        self._clear_layer_state()
+        self._refresh_osk_layer()
+
+    def _layer_triggers(self) -> list:
+        # active triggers, strongest first: waiting once key, held keys, toggled keys (latest first)
+        out = [self._pending_dead] if self._pending_dead else []
+        out += list(reversed(self._held_keys))
+        out += list(reversed(self._toggled_keys))
+        return out
+
+    def _refresh_osk_layer(self):
+        # the OSK relabels its keys with the active layer and lights the active triggers
+        osk = getattr(self, 'osk', None)
+        if osk is None or not hasattr(osk, 'set_layer_state'):
+            return
+        overlay: Dict[str, str] = {}
+        for trigger in reversed(self._layer_triggers()):
+            overlay.update(self._dead_combos.get(trigger, {}))
+        osk.set_layer_state(overlay, set(self._held_keys) | set(self._toggled_keys), self._pending_dead)
+
+    def _press_layer_key(self, key_code: str, mode: str, osk_click: bool, target=None):
+        if mode == "toggle":
+            if key_code in self._toggled_keys:
+                self._toggled_keys = [k for k in self._toggled_keys if k != key_code]
+            else:
+                self._toggled_keys = self._toggled_keys + [key_code]
+            self._refresh_osk_layer()
+        elif osk_click:
+            # a mouse click cannot keep a key down: the layer applies to the next key only
+            self._set_pending_dead(None if self._pending_dead == key_code else key_code, target)
+        else:
+            if key_code not in self._held_keys:
+                self._held_keys = self._held_keys + [key_code]
+            self._refresh_osk_layer()
+
+    def _release_layer_key(self, key_code: str) -> bool:
+        # True when this key is a trigger: its press was consumed, so its release is consumed too
+        if key_code not in self._trigger_modes:
+            return False
+        if key_code in self._held_keys:
+            self._held_keys = [k for k in self._held_keys if k != key_code]
+            self._refresh_osk_layer()
+        return True
 
     def _show_preedit(self, text: str, target=None):
         widget = resolve_text_target(target or QApplication.focusWidget())
@@ -420,48 +530,68 @@ class MainWindow(QMainWindow):
             self._set_pending_dead(None)   # Enter, arrows, Tab ... just drop the pending key
         return False
 
-    def _handle_conlang_key(self, key_code: str, target=None) -> bool:
-        # returns True when the key was consumed (typed a glyph or started a dead key)
+    def _handle_conlang_key(self, key_code: str, target=None, osk_click: bool = False) -> bool:
+        # returns True when the key was consumed (typed a glyph, or changed a layer)
         def insert(text):
             insert_into_widget(target or QApplication.focusWidget(), text)
 
+        def flash():
+            if self.osk is not None and hasattr(self.osk, 'highlight_key'):
+                self.osk.highlight_key(key_code)
+
         pending = self._pending_dead
-        if pending is not None and key_code in ("Shift", "Alt") \
-                and key_code not in self._dead_combos.get(pending, {}):
-            return False   # Shift / Alt held for the next key does not cancel the dead key
+        mode = self._trigger_modes.get(key_code)
         if key_code == "Backspace":
             if pending is None:
                 return False
-            self._set_pending_dead(None)   # cancel the waiting dead key, nothing typed
+            self._set_pending_dead(None)   # cancel the waiting key, nothing typed
             return True
+
+        partner = pending is not None and key_code in self._dead_combos.get(pending, {})
+
+        # hold and toggle keys switch a layer and type nothing themselves
+        if mode in ("hold", "toggle") and not partner:
+            self._press_layer_key(key_code, mode, osk_click, target)
+            return True
+
         if pending is not None:
+            if key_code in ("Shift", "Alt", "Caps") and not partner and mode is None:
+                return False   # a modifier pressed for the next key does not cancel the waiting key
             self._set_pending_dead(None)   # also removes the underlined preview
             combo = self._dead_combos.get(pending, {}).get(key_code)
             if combo:
-                if self.osk is not None and hasattr(self.osk, 'highlight_key'):
-                    self.osk.highlight_key(key_code)
+                flash()
                 insert(combo)
                 return True
             own = self._glyph_for_key(pending)
             if own:
                 insert(own)
             if key_code == pending or key_code == " ":
-                return True    # same dead key twice, or Space: own glyph typed once
+                return True    # same key twice, or Space: own glyph typed once
             # no combination: own glyph already typed, now handle this key normally
-        if key_code in self._dead_keys:
+
+        if mode == "once":
             self._set_pending_dead(key_code, target)
             return True
+
+        # held and toggled layers change what a key types
+        for trigger in self._layer_triggers():
+            combo = self._dead_combos.get(trigger, {}).get(key_code)
+            if combo:
+                flash()
+                insert(combo)
+                return True
+
         glyph = self._glyph_for_key(key_code)
         if glyph:
-            if self.osk is not None and hasattr(self.osk, 'highlight_key'):
-                self.osk.highlight_key(key_code)
+            flash()
             insert(glyph)
             return True
         return False
 
     def _on_osk_key_clicked(self, key_code: str, target=None) -> bool:
         # called by the on-screen keyboard; True means the click was handled here
-        return self._handle_conlang_key(key_code, target)
+        return self._handle_conlang_key(key_code, target, osk_click=True)
 
     @staticmethod
     def _qkey_to_key_code(event) -> Optional[str]:
@@ -475,6 +605,8 @@ class MainWindow(QMainWindow):
             return chr(ord('0') + (key - Qt.Key.Key_0))
         if key == Qt.Key.Key_Tab:
             return "Tab"
+        if key == Qt.Key.Key_CapsLock:
+            return "Caps"
         if key == Qt.Key.Key_Shift:
             return "Shift"
         if key in (Qt.Key.Key_Alt, Qt.Key.Key_AltGr):
