@@ -63,7 +63,7 @@ class GlyphAudioWidget(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        self.btn_record = QPushButton("⏺ Record Audio")
+        self.btn_record = QPushButton("⏺ Rec Audio")
         self.btn_record.setObjectName("BtnRecordAudio")
         self.btn_record.setStyleSheet("""
             QPushButton#BtnRecordAudio {
@@ -94,7 +94,7 @@ class GlyphAudioWidget(QWidget):
         """)
         self.btn_play.clicked.connect(self.play_audio)
 
-        self.btn_delete = QPushButton("🗑 Clear")
+        self.btn_delete = QPushButton("Clear")
         self.btn_delete.setObjectName("BtnDeleteAudio")
         self.btn_delete.setStyleSheet("""
             QPushButton#BtnDeleteAudio {
@@ -153,7 +153,7 @@ class GlyphAudioWidget(QWidget):
         else:
             self.lbl_status.setText("No pronunciation audio recorded")
             self.lbl_status.setStyleSheet("font-size: 11px; color: #888888;")
-            self.btn_record.setText("⏺ Record Audio")
+            self.btn_record.setText("⏺ Rec Audio")
             self.btn_record.setStyleSheet("background-color: #d9534f; color: white; padding: 6px 12px; border-radius: 4px;")
 
     def toggle_record(self):

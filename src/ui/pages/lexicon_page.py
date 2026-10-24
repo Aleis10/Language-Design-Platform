@@ -82,7 +82,7 @@ class _EntryDialog(QDialog):
 
         self.audio_widget = GlyphAudioWidget(base_audio_dir=base_audio_dir)
         self.audio_widget.set_glyph(str(uuid.uuid4()))
-        form.addRow("Record new / overwrite selected:", self.audio_widget)
+        form.addRow("Record :", self.audio_widget)
 
         self.input_variant_label = QLineEdit()
         self.input_variant_label.setPlaceholderText("e.g. Slow, Fast, Female, Formal...")

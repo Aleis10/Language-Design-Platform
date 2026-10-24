@@ -1,16 +1,19 @@
 """Transcribe & Translate page.
 
-    type English  ->  translation engine  ->  conlang words
+    speak or type English  ->  (Whisper)  ->  English text  ->  translation engine  ->  conlang words
 
+* Speech to text needs `pip install faster-whisper`; typing always works.
 * The word table shows what each English word matched and how it was inflected. Double-click an
   ambiguous word to pick another entry; double-click an unknown word to add it to the lexicon.
 * Words currently come out in English word order (word order is a later engine step).
 """
 import os
+import tempfile
+import time
 from typing import Any, Dict, List, Optional
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor, QKeySequence, QShortcut
+from PySide6.QtCore import QObject, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtGui import QBrush, QColor, QIcon, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QComboBox, QDialog, QFormLayout,
     QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
@@ -20,10 +23,117 @@ from PySide6.QtWidgets import (
 from database.transcribe_db import DEFAULTS
 from digital_keyboard import install_conlang_delegate, track_conlang_widget
 from translation import TranslationEngine
+from translation.speech import WhisperBackend
 
 from .lexicon_page import add_entry_via_dialog
 
 UNKNOWN_CHOICES = [("Show as [word]", "bracket"), ("Keep the English word", "keep"), ("Leave it out", "skip")]
+
+# Whisper model used for speech to text (downloaded on first use, then works offline)
+WHISPER_MODEL = "base.en"
+
+
+def _record_icon(recording: bool, size: int = 22) -> QIcon:
+    # record = red dot, recording = white stop square (the button turns red); drawn, so no icon file is needed
+    scale = 2
+    pm = QPixmap(size * scale, size * scale)
+    pm.setDevicePixelRatio(scale)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(Qt.PenStyle.NoPen)
+    if recording:
+        p.setBrush(QColor("#ffffff"))
+        inset = size * 0.28
+        p.drawRoundedRect(QRectF(inset, inset, size - 2 * inset, size - 2 * inset), 2, 2)
+    else:
+        p.setBrush(QColor("#d9534f"))
+        inset = size * 0.18
+        p.drawEllipse(QRectF(inset, inset, size - 2 * inset, size - 2 * inset))
+    p.end()
+    return QIcon(pm)
+
+
+class MicRecorder(QObject):
+    """Records the microphone to a temporary WAV file (same Qt classes as the glyph audio widget)."""
+
+    finished = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._path = ""
+        self._active = False
+        self.recorder = None
+        self.reason = ""
+        try:
+            from PySide6.QtMultimedia import QAudioInput, QMediaCaptureSession, QMediaFormat, QMediaRecorder
+            self._session = QMediaCaptureSession(self)
+            self._input = QAudioInput(self)
+            self._session.setAudioInput(self._input)
+            self.recorder = QMediaRecorder(self)
+            self._session.setRecorder(self.recorder)
+            fmt = QMediaFormat()
+            fmt.setFileFormat(QMediaFormat.FileFormat.Wave)
+            fmt.setAudioCodec(QMediaFormat.AudioCodec.Wave)
+            self.recorder.setMediaFormat(fmt)
+            self.recorder.recorderStateChanged.connect(self._on_state)
+            self.recorder.errorOccurred.connect(self._on_error)
+        except Exception as exc:                       # no multimedia backend
+            self.recorder = None
+            self.reason = str(exc)
+
+    def available(self) -> bool:
+        if self.recorder is None:
+            return False
+        try:
+            from PySide6.QtMultimedia import QMediaDevices
+            return bool(QMediaDevices.audioInputs())
+        except Exception:
+            return False
+
+    def start(self) -> None:
+        self._path = os.path.join(tempfile.gettempdir(), f"transcribe_{int(time.time())}.wav")
+        self.recorder.setOutputLocation(QUrl.fromLocalFile(self._path))
+        self._active = True
+        self.recorder.record()
+
+    def stop(self) -> None:
+        if self.recorder is not None:
+            self.recorder.stop()
+
+    def _on_state(self, state) -> None:
+        from PySide6.QtMultimedia import QMediaRecorder
+        if state == QMediaRecorder.RecorderState.StoppedState and self._active:
+            self._active = False
+            self.finished.emit(self._path)
+
+    def _on_error(self, _error, message: str) -> None:
+        self._active = False
+        self.failed.emit(message or "Recording failed.")
+
+
+class _SpeechWorker(QThread):
+    """Runs Whisper off the UI thread."""
+
+    done = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, backend, path: str, model: str, delete_after: bool, parent=None):
+        super().__init__(parent)
+        self.backend, self.path, self.model, self.delete_after = backend, path, model, delete_after
+
+    def run(self) -> None:
+        try:
+            self.done.emit(self.backend.transcribe(self.path, self.model))
+        except Exception as exc:
+            self.failed.emit(str(exc))
+        finally:
+            if self.delete_after:
+                try:
+                    os.remove(self.path)
+                except OSError:
+                    pass
 
 
 class _ChooseEntryDialog(QDialog):
@@ -122,6 +232,15 @@ class TranscribePage(QWidget):
         self.last_translation = None
         self._row_to_word: List[int] = []
 
+        self.speech = WhisperBackend()
+        self._mic: Optional[MicRecorder] = None
+        self._worker: Optional[_SpeechWorker] = None
+        self._recording = False
+        self._rec_started = 0.0
+        self._rec_timer = QTimer(self)
+        self._rec_timer.setInterval(500)
+        self._rec_timer.timeout.connect(self._tick_recording)
+
         self._build_ui()
         self._load_stylesheet()
         self._refresh_info()
@@ -147,6 +266,15 @@ class TranscribePage(QWidget):
         title.setObjectName("TrTitle")
         top.addWidget(title)
         top.addSpacing(12)
+        self.btn_record = QPushButton()
+        self.btn_record.setObjectName("TrRecord")
+        self.btn_record.setIcon(_record_icon(False))
+        self.btn_record.setIconSize(QSize(22, 22))
+        self.btn_record.setFixedSize(36, 36)
+        self.btn_record.setToolTip("Record speech (English). Click again to stop.")
+        self.btn_record.setProperty("recording", False)
+        self.btn_record.clicked.connect(self._toggle_record)
+        top.addWidget(self.btn_record)
         self.lbl_status = QLabel("")
         self.lbl_status.setObjectName("TrStatus")
         top.addWidget(self.lbl_status, stretch=1)
@@ -162,7 +290,7 @@ class TranscribePage(QWidget):
 
         lay.addWidget(self._section("English"))
         self.input_text = QPlainTextEdit()
-        self.input_text.setPlaceholderText("Type English here.   Ctrl+Enter translates.")
+        self.input_text.setPlaceholderText("Type English here, or press the record button and speak.   Ctrl+Enter translates.")
         self.input_text.setFixedHeight(84)
         lay.addWidget(self.input_text)
         QShortcut(QKeySequence("Ctrl+Return"), self.input_text, activated=self._on_translate_clicked)
@@ -182,7 +310,7 @@ class TranscribePage(QWidget):
         row.addWidget(self.lbl_info)
         lay.addLayout(row)
 
-        lay.addWidget(self._section("Conlang"))
+        lay.addWidget(self._section("Constructed language (ConLang)"))
         self.output_text = QPlainTextEdit()
         self.output_text.setReadOnly(True)
         self.output_text.setFixedHeight(84)
@@ -222,11 +350,6 @@ class TranscribePage(QWidget):
         self.table.customContextMenuRequested.connect(self._row_menu)
         lay.addWidget(self.table, stretch=1)
 
-        self.lbl_warn = QLabel("")
-        self.lbl_warn.setObjectName("TrWarn")
-        self.lbl_warn.setWordWrap(True)
-        self.lbl_warn.setVisible(False)
-        lay.addWidget(self.lbl_warn)
         hint = QLabel("Double-click an ambiguous word to choose another entry, or an unknown word to add it to the lexicon.")
         hint.setObjectName("TrHint")
         lay.addWidget(hint)
@@ -297,7 +420,6 @@ class TranscribePage(QWidget):
         self.output_text.setPlainText("")
         self.lbl_gloss.setText("")
         self.table.setRowCount(0)
-        self.lbl_warn.setVisible(False)
 
     @staticmethod
     def _via(word) -> str:
@@ -341,8 +463,6 @@ class TranscribePage(QWidget):
                 if w.notes:
                     item.setToolTip("\n".join(w.notes))
                 self.table.setItem(row, col, item)
-        self.lbl_warn.setText("\n".join("\u2022 " + x for x in t.warnings))
-        self.lbl_warn.setVisible(bool(t.warnings))
         self._refresh_info()
 
     # ---------------------------------------------------- word actions
@@ -402,3 +522,96 @@ class TranscribePage(QWidget):
             self.settings_repo.set_many(self.language_id, dlg.values())
             if self.last_translation is not None:
                 self.translate_text(self.input_text.toPlainText())
+
+    # --------------------------------------------------------------- speech
+    def _need_speech(self) -> bool:
+        if self.speech.available():
+            return True
+        QMessageBox.information(
+            self, "Speech to text not installed",
+            "Speech to text uses Whisper through faster-whisper.\n\nInstall it with:\n\n    pip install faster-whisper\n\n"
+            "You can still type English and translate it.")
+        return False
+
+    def _busy(self) -> bool:
+        return self._worker is not None and self._worker.isRunning()
+
+    def _set_record_button(self, recording: bool) -> None:
+        self.btn_record.setIcon(_record_icon(recording))
+        self.btn_record.setProperty("recording", recording)
+        self.btn_record.setToolTip("Stop recording" if recording else "Record speech (English). Click again to stop.")
+        self.btn_record.style().unpolish(self.btn_record)   # re-apply the stylesheet for the new property
+        self.btn_record.style().polish(self.btn_record)
+
+    def _toggle_record(self) -> None:
+        if self._recording:
+            self._mic.stop()
+            self.btn_record.setEnabled(False)
+            self._set_status("Finishing recording\u2026")
+            return
+        if not self._need_speech() or self._busy():
+            return
+        if self._mic is None:
+            self._mic = MicRecorder(self)
+            self._mic.finished.connect(self._on_recording_finished)
+            self._mic.failed.connect(self._on_recording_failed)
+        if not self._mic.available():
+            QMessageBox.warning(self, "No microphone", "No microphone or audio backend was found." +
+                                (f"\n\n{self._mic.reason}" if self._mic.reason else ""))
+            return
+        self._mic.start()
+        self._recording = True
+        self._rec_started = time.time()
+        self._set_record_button(True)
+        self._rec_timer.start()
+        self._tick_recording()
+
+    def _tick_recording(self) -> None:
+        secs = int(time.time() - self._rec_started)
+        self._set_status(f"Recording\u2026 {secs // 60}:{secs % 60:02d}   (click the red button to stop)")
+
+    def _reset_record_button(self) -> None:
+        self._recording = False
+        self._rec_timer.stop()
+        self._set_record_button(False)
+        self.btn_record.setEnabled(True)
+
+    def _on_recording_finished(self, path: str) -> None:
+        self._reset_record_button()
+        self._start_transcription(path)
+
+    def _on_recording_failed(self, message: str) -> None:
+        self._reset_record_button()
+        self._set_status("")
+        QMessageBox.warning(self, "Recording failed", message)
+
+    def _start_transcription(self, path: str) -> None:
+        self._set_status(f"Transcribing with {WHISPER_MODEL}\u2026 (the first run downloads the model)")
+        self.btn_record.setEnabled(False)
+        self._worker = _SpeechWorker(self.speech, path, WHISPER_MODEL, True, self)
+        self._worker.done.connect(self._on_transcribed)
+        self._worker.failed.connect(self._on_transcribe_failed)
+        self._worker.finished.connect(lambda: self.btn_record.setEnabled(True))
+        self._worker.start()
+
+    def _on_transcribed(self, text: str) -> None:
+        text = text.strip()
+        if not text:
+            self._set_status("No speech was detected.")
+            return
+        existing = self.input_text.toPlainText().strip()
+        full = f"{existing} {text}" if existing else text      # add to what is already typed
+        self.input_text.setPlainText(full)
+        self.translate_text(full)
+        self._set_status("Transcribed and translated. Check the English if a word looks wrong.")
+
+    def _on_transcribe_failed(self, message: str) -> None:
+        self._set_status("")
+        QMessageBox.warning(self, "Transcription failed", message)
+
+    def shutdown(self) -> None:
+        # stop background work; call before the page is destroyed
+        if self._recording and self._mic is not None:
+            self._mic.stop()
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.wait(5000)

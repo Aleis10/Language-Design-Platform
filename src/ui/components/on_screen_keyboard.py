@@ -2,9 +2,9 @@ from typing import Optional, Dict, Any
 
 from PySide6.QtWidgets import (
     QApplication, QWidget, QGridLayout, QPushButton, QLabel, QToolButton,
-    QVBoxLayout, QHBoxLayout, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox,
+    QVBoxLayout, QHBoxLayout, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QListView,
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QSize, QPointF
+from PySide6.QtCore import Qt, Signal, QTimer, QSize, QPointF, QEvent
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPen, QColor, QPolygonF
 
 from digital_keyboard import (
@@ -102,6 +102,7 @@ class OnScreenKeyboard(QWidget):
 
     closed = Signal()
     preset_changed = Signal(str)   # user picked another preset in the dropdown
+    layout_changed = Signal()      # size changed (minimized / restored); the owner re-docks it
 
     def __init__(
         self,
@@ -110,8 +111,16 @@ class OnScreenKeyboard(QWidget):
         session_dir="",
         parent=None,
         mappings: Optional[Dict[str, Dict[str, Any]]] = None,
+        embedded: bool = True,
     ):
+        # embedded: a panel inside the parent window (can always be docked bottom-right, even on
+        # Wayland where apps cannot place their own windows). Not embedded: a separate window,
+        # used only over a popup dialog, which would be clipped to the dialog's small size.
         super().__init__(parent)
+        self._embedded = embedded
+        self._collapsed = False
+        self._user_moved = False
+        self._drag_start = None
 
         self.keyboard_repo = keyboard_repo
         self.language_id = language_id
@@ -124,19 +133,21 @@ class OnScreenKeyboard(QWidget):
         self._active_keys: set = set()                # held / toggled trigger keys (green)
         self._overlay: Dict[str, str] = {}            # key -> character typed in the active layer
 
-        # title bar with minimize + close only (no maximize), always on top
-        self.setWindowFlags(
-            Qt.WindowType.Window
-            | Qt.WindowType.CustomizeWindowHint
-            | Qt.WindowType.WindowTitleHint
-            | Qt.WindowType.WindowSystemMenuHint
-            | Qt.WindowType.WindowMinimizeButtonHint
-            | Qt.WindowType.WindowCloseButtonHint
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
-        self.setWindowTitle("On-Screen Keyboard")
+        if not embedded:
+            # title bar with minimize + close only (no maximize), always on top
+            self.setWindowFlags(
+                Qt.WindowType.Window
+                | Qt.WindowType.CustomizeWindowHint
+                | Qt.WindowType.WindowTitleHint
+                | Qt.WindowType.WindowSystemMenuHint
+                | Qt.WindowType.WindowMinimizeButtonHint
+                | Qt.WindowType.WindowCloseButtonHint
+                | Qt.WindowType.WindowStaysOnTopHint
+            )
+            self.setWindowTitle("On-Screen Keyboard")
+            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         # Make sure the CURRENT font build is registered before any button uses it.
@@ -247,26 +258,56 @@ class OnScreenKeyboard(QWidget):
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(6)
 
-        header = QHBoxLayout()
+        self._header = QWidget()
+        self._header.setObjectName("OSKHeader")
+        header = QHBoxLayout(self._header)
+        header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(8)
-        lbl = QLabel("On-Screen Keyboard")
-        lbl.setObjectName("OSKTitle")
-        header.addWidget(lbl)
+        self._title = QLabel("On-Screen Keyboard")
+        self._title.setObjectName("OSKTitle")
+        header.addWidget(self._title)
         header.addStretch()
         self.combo_presets = QComboBox()
         self.combo_presets.setObjectName("OSKPresets")
-        self.combo_presets.setMinimumWidth(130)
+        self.combo_presets.setView(QListView())          # a list view so the row height can be styled
+        self.combo_presets.setMinimumWidth(230)
+        self.combo_presets.setMaxVisibleItems(15)
         self.combo_presets.setFocusPolicy(Qt.FocusPolicy.NoFocus)   # do not steal focus from the field
         self.combo_presets.setToolTip("Keyboard preset")
-        track_conlang_combo(self.combo_presets, 11)
+        track_conlang_combo(self.combo_presets, 12)
         self.combo_presets.currentIndexChanged.connect(self._on_preset_picked)
         header.addWidget(self.combo_presets)
-        root.addLayout(header)
+        if self._embedded:
+            # the panel has no window title bar, so it carries its own minimize and close buttons
+            self.btn_min = QToolButton()
+            self.btn_min.setObjectName("OSKMin")
+            self.btn_min.setText("–")
+            self.btn_min.setToolTip("Minimize")
+            self.btn_min.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            self.btn_min.clicked.connect(lambda: self.set_collapsed(not self._collapsed))
+            header.addWidget(self.btn_min)
+            self.btn_close = QToolButton()
+            self.btn_close.setObjectName("OSKClose")
+            self.btn_close.setText("✕")
+            self.btn_close.setToolTip("Close")
+            self.btn_close.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            self.btn_close.clicked.connect(self.close)
+            header.addWidget(self.btn_close)
+            # drag the panel by its title bar
+            self._header.setCursor(Qt.CursorShape.SizeAllCursor)
+            self._header.installEventFilter(self)
+            self._title.installEventFilter(self)
+        root.addWidget(self._header)
+
+        self._body = QWidget()
+        body = QVBoxLayout(self._body)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(6)
 
         hint = QLabel("Click to insert mapped characters into focused field.")
         hint.setObjectName("OSKHint")
         hint.setWordWrap(True)
-        root.addWidget(hint)
+        body.addWidget(hint)
 
         grid = QGridLayout()
         grid.setSpacing(4)
@@ -290,20 +331,74 @@ class OnScreenKeyboard(QWidget):
                 self._key_buttons[key] = btn
             row += 1
 
+        # Backspace sits right after the "=" key, same size as the other keys
         backspace_btn = QPushButton()
         backspace_btn.setObjectName("Key_Backspace")
         backspace_btn.setIcon(_backspace_icon(30))
         backspace_btn.setIconSize(QSize(30, 30))
         backspace_btn.setToolTip("Backspace")
         backspace_btn.setMinimumHeight(KEY_HEIGHT)
+        backspace_btn.setMinimumWidth(KEY_WIDTH)
         backspace_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         backspace_btn.clicked.connect(self._backspace)
-        grid.addWidget(backspace_btn, row, 0, 1, 4)
+        grid.addWidget(backspace_btn, 0, len(QWERTY_ROWS[0]))
         self._key_buttons["Backspace"] = backspace_btn
 
-        root.addLayout(grid)
+        body.addLayout(grid)
+        root.addWidget(self._body)
         root.setSizeConstraint(QVBoxLayout.SizeConstraint.SetFixedSize)
         self.setStyleSheet(self._qss())
+
+    # ---- panel behaviour (embedded mode) ---------------------------------
+
+    @property
+    def user_moved(self) -> bool:
+        return self._user_moved
+
+    def isMinimized(self) -> bool:
+        # for the panel, "minimized" means only the title bar is shown
+        return self._collapsed if self._embedded else super().isMinimized()
+
+    def showNormal(self):
+        if self._embedded:
+            self.set_collapsed(False)
+            self.show()
+            self.raise_()
+        else:
+            super().showNormal()
+
+    def set_collapsed(self, collapsed: bool):
+        if not self._embedded:
+            return
+        self._collapsed = collapsed
+        self._body.setVisible(not collapsed)
+        self.btn_min.setText("□" if collapsed else "–")
+        self.btn_min.setToolTip("Restore" if collapsed else "Minimize")
+        self.layout().activate()
+        self.adjustSize()
+        self.layout_changed.emit()
+
+    def eventFilter(self, obj, event):
+        # drag the panel by its title bar, kept inside the parent window
+        if self._embedded and obj in (self._header, self._title):
+            t = event.type()
+            if t == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+                self._drag_start = (event.globalPosition().toPoint(), self.pos())
+                return True
+            if t == QEvent.Type.MouseMove and self._drag_start is not None:
+                start_global, start_pos = self._drag_start
+                new = start_pos + (event.globalPosition().toPoint() - start_global)
+                parent = self.parentWidget()
+                if parent is not None:
+                    new.setX(max(0, min(new.x(), parent.width() - self.width())))
+                    new.setY(max(0, min(new.y(), parent.height() - self.height())))
+                self.move(new)
+                self._user_moved = True
+                return True
+            if t == QEvent.Type.MouseButtonRelease and self._drag_start is not None:
+                self._drag_start = None
+                return True
+        return super().eventFilter(obj, event)
 
     def set_presets(self, presets, current_id: Optional[str]):
         # presets: [(id, name)]; refreshes the dropdown without firing preset_changed
@@ -315,6 +410,10 @@ class OnScreenKeyboard(QWidget):
         if idx >= 0:
             self.combo_presets.setCurrentIndex(idx)
         self.combo_presets.blockSignals(False)
+        # the dropdown list is at least as wide as the combo and fits the longest preset name
+        fm = self.combo_presets.fontMetrics()
+        widest = max((fm.horizontalAdvance(name) for _pid, name in presets), default=0)
+        self.combo_presets.view().setMinimumWidth(max(self.combo_presets.minimumWidth(), widest + 60))
 
     def _on_preset_picked(self, _index: int):
         pid = self.combo_presets.currentData()
@@ -389,6 +488,12 @@ class OnScreenKeyboard(QWidget):
             border-radius: 10px;
         }
         QLabel#OSKTitle { font-size: 13px; font-weight: bold; color: #111111; }
+        QToolButton#OSKMin, QToolButton#OSKClose {
+            border: none; background: transparent; color: #555555;
+            font-size: 15px; font-weight: bold; padding: 2px 8px;
+        }
+        QToolButton#OSKMin:hover { background: #e4e4e4; border-radius: 4px; }
+        QToolButton#OSKClose:hover { background: #e5534b; color: white; border-radius: 4px; }
         QLabel#OSKHint { font-size: 10px; color: #888888; }
         QPushButton {
             background: #ffffff;
@@ -399,11 +504,12 @@ class OnScreenKeyboard(QWidget):
         }
         QPushButton:hover { background: #eef4fd; border-color: #007acc; }
         QComboBox#OSKPresets {
-            background: #ffffff; color: #111111;
-            border: 1px solid #c8c8c8; border-radius: 5px; padding: 2px 6px;
+            background: #ffffff; color: #111111; min-height: 28px;
+            border: 1px solid #c8c8c8; border-radius: 5px; padding: 2px 8px;
         }
         QComboBox#OSKPresets QAbstractItemView {
-            background: #ffffff; color: #111111;
+            background: #ffffff; color: #111111; outline: none;
             selection-background-color: #007acc; selection-color: #ffffff;
         }
+        QComboBox#OSKPresets QAbstractItemView::item { min-height: 32px; padding: 2px 8px; }
         """

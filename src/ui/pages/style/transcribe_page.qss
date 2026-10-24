@@ -36,15 +36,6 @@ QLabel#TrGloss {
     padding: 2px 2px;
 }
 
-QLabel#TrWarn {
-    color: #8a5a00;
-    background-color: #fff6e0;
-    border: 1px solid #f0d9a0;
-    border-radius: 4px;
-    padding: 6px 8px;
-    font-size: 12px;
-}
-
 QPushButton#TrPrimary {
     background-color: #007acc;
     color: #ffffff;
@@ -114,3 +105,15 @@ QComboBox QAbstractItemView {
     selection-background-color: #007acc;
     selection-color: #ffffff;
 }
+
+/* Round record button: red dot when idle, red button with a stop square while recording */
+QPushButton#TrRecord {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 18px;
+    padding: 0;
+}
+QPushButton#TrRecord:hover { background-color: #fdecec; border-color: #d9534f; }
+QPushButton#TrRecord[recording="true"] { background-color: #d9534f; border-color: #d9534f; }
+QPushButton#TrRecord[recording="true"]:hover { background-color: #c9302c; }
+QPushButton#TrRecord:disabled { background-color: #eeeeee; border-color: #dddddd; }

@@ -212,49 +212,54 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("No language loaded; cannot open OSK", 3000)
             self._set_kbd_button_checked(False)
             return
-        # if a modal popup is open, parent the keyboard to it so the popup
-        # does not block the keyboard's close button
-        osk_parent = QApplication.activeModalWidget() or self
+        # normally the keyboard is a panel inside the main window, docked bottom-right (apps cannot
+        # place their own windows on Wayland). Over a modal popup it becomes a separate window
+        # parented to the popup, so the popup does not block it and it is not clipped to the popup.
+        modal = QApplication.activeModalWidget()
+        embedded = modal is None
         self.osk = OnScreenKeyboard(
             keyboard_repo=self.keyboard_repo,
             language_id=self.language_id,
             session_dir=self.session_dir or "",
-            parent=osk_parent,
+            parent=self if embedded else modal,
             mappings=getattr(self, '_glyph_mappings', {}),
+            embedded=embedded,
         )
         self.osk.closed.connect(self._on_osk_closed)
         self.osk.destroyed.connect(self._on_osk_destroyed)
+        self.osk.layout_changed.connect(self._position_osk)
         self.osk.key_handler = self._on_osk_key_clicked
         self.osk.preset_changed.connect(self._on_osk_preset_selected)
         self._clear_layer_state()
         self._sync_osk_presets()
         self._set_kbd_button_checked(True)
         self.osk.adjustSize()
-        self._position_osk()          # place before showing, then again once the window frame exists
+        self._position_osk()
         self.osk.show()
-        QTimer.singleShot(0, self._position_osk)
-        QTimer.singleShot(150, self._position_osk)
-        if QGuiApplication.platformName().startswith("wayland") and not getattr(self, "_wayland_note", False):
-            self._wayland_note = True
-            self.statusBar().showMessage(
-                "Wayland does not let apps choose a window's position. Start the app with "
-                "QT_QPA_PLATFORM=xcb to place the keyboard bottom-right.", 9000)
+        self.osk.raise_()
+        QTimer.singleShot(0, self._position_osk)   # again once the layout has its final size
 
     def _position_osk(self):
-        # bottom-right corner of the main window, kept inside the screen
-        if self.osk is None:
+        # the panel sits in the bottom-right corner of its parent window; once the user has dragged
+        # it, it only stays inside the parent. A separate window (over a popup) is left to the WM.
+        osk = self.osk
+        if osk is None or not getattr(osk, "_embedded", False):
             return
-        screen = self.screen() or QGuiApplication.primaryScreen()
-        avail = screen.availableGeometry() if screen else None
-        frame = self.osk.frameGeometry()   # includes the title bar once the window is shown
-        w, h = frame.width(), frame.height()
-        corner = self.mapToGlobal(self.rect().bottomRight())
-        x = corner.x() - w - 24
-        y = corner.y() - h - 40
-        if avail is not None:
-            x = max(avail.left(), min(x, avail.right() - w))
-            y = max(avail.top(), min(y, avail.bottom() - h))
-        self.osk.move(x, y)
+        parent = osk.parentWidget()
+        if parent is None:
+            return
+        w, h = osk.width(), osk.height()
+        if osk.user_moved:
+            x, y = osk.x(), osk.y()
+        else:
+            margin = 14
+            bar = self.statusBar() if parent is self else None
+            bottom = margin + (bar.height() if bar is not None and bar.isVisible() else 0)
+            x = parent.width() - w - margin
+            y = parent.height() - h - bottom
+        x = max(0, min(x, parent.width() - w))
+        y = max(0, min(y, parent.height() - h))
+        osk.move(x, y)
 
     def _sync_osk_presets(self):
         # keep the keyboard's preset dropdown in step with the Keyboard page
@@ -397,6 +402,9 @@ class MainWindow(QMainWindow):
                 and isinstance(obj, QDialog) and obj.isModal() \
                 and obj is not self.osk and not self.osk.isAncestorOf(obj):
             self._close_osk()
+        if et == QEvent.Type.Resize and self.osk is not None and getattr(self.osk, "_embedded", False) \
+                and obj is self.osk.parentWidget():
+            self._position_osk()
         # a held key must not stay "down" when the app loses focus (its release goes elsewhere)
         if et == QEvent.Type.ApplicationDeactivate and self._held_keys:
             self._held_keys = []
@@ -808,6 +816,9 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+        old_transcribe = getattr(self, "transcribe_page", None)
+        if old_transcribe is not None:
+            old_transcribe.shutdown()
         layout = self.pages if getattr(self, "pages", None) else None
         while self.pages.count():
             self.pages.removeWidget(self.pages.widget(0))
@@ -852,6 +863,9 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Loaded: {self.project_name}", 4000)
 
     def closeEvent(self, event):
+        page = getattr(self, "transcribe_page", None)
+        if page is not None:
+            page.shutdown()
         if self.archive_path and self.session_dir and self.archive_manager:
             try:
                 self.archive_manager.save_archive(
