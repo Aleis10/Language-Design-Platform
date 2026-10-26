@@ -417,6 +417,7 @@ class Glyphs_Page(QWidget):
         canvas_col.setSpacing(8)
 
         self.canvas = GlyphCanvasWidget()
+        self.canvas.legacy_erasers_removed.connect(self._on_legacy_erasers_removed)
         self.toolbar = CanvasStudioToolBar(self.canvas)
 
         canvas_col.addWidget(self.toolbar)
@@ -578,6 +579,14 @@ class Glyphs_Page(QWidget):
                     # Refresh gallery and open studio mode
                     self.refresh_gallery()
                     self.open_studio_mode(new_glyph, selected_group)
+
+    def _on_legacy_erasers_removed(self, count: int):
+        # glyphs drawn with the old eraser: its marks only hid strokes on screen and never reached the font
+        window = self.window()
+        if hasattr(window, "statusBar"):
+            window.statusBar().showMessage(
+                f"This glyph used the old eraser ({count} mark{'s' if count != 1 else ''}). Strokes it hid are shown "
+                "again, as they were in the font. Use the new eraser, then save.", 12000)
 
     def open_studio_mode(self, glyph: Dict[str, Any], group: Dict[str, Any]):
         self.active_glyph_id = glyph["id"]
