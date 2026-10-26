@@ -117,3 +117,22 @@ def parse_number(text: str) -> Optional[float]:
         return float(text)
     except (TypeError, ValueError):
         return None
+
+
+def flow_positions(sizes: Sequence[Tuple[float, float]], width: float,
+                   h_spacing: float, v_spacing: float) -> Tuple[List[Point], float]:
+    # wrap items left to right, starting a new row when the next one would not fit.
+    # Returns the top left corner of every item and the total height used.
+    positions: List[Point] = []
+    x = y = 0.0
+    row_height = 0.0
+    for w, h in sizes:
+        if x > 0 and x + w > width:
+            x = 0.0
+            y += row_height + v_spacing
+            row_height = 0.0
+        positions.append((x, y))
+        x += w + h_spacing
+        row_height = max(row_height, h)
+    total = y + row_height if sizes else 0.0
+    return positions, total

@@ -304,7 +304,7 @@ class Glyphs_Page(QWidget):
             lbl_preview.setText("[Empty]")
             lbl_preview.setStyleSheet("color: #aaaaaa; font-size: 11px;")
 
-        lbl_name = ConlangLabel(glyph["name"])
+        lbl_name = ConlangLabel(glyph["name"] or "(unnamed)")
         lbl_name.setStyleSheet("font-weight: bold; font-size: 13px; color: #111111;")
         lbl_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -337,7 +337,7 @@ class Glyphs_Page(QWidget):
         btn_del = QPushButton("🗑")
         btn_del.setStyleSheet("border: none; color: #888888; font-size: 11px;")
         btn_del.setToolTip("Delete Glyph")
-        btn_del.clicked.connect(lambda _, gid=glyph["id"], gname=glyph["name"]: self.confirm_delete_glyph(gid, gname))
+        btn_del.clicked.connect(lambda _, gid=glyph["id"], gname=(glyph["name"] or "(unnamed)"): self.confirm_delete_glyph(gid, gname))
 
         btn_row.addWidget(btn_edit)
         btn_row.addWidget(btn_del)
@@ -428,7 +428,7 @@ class Glyphs_Page(QWidget):
 
         self.meta_panel = QFrame()
         self.meta_panel.setObjectName("StudioMetadataPanel")
-        self.meta_panel.setFixedWidth(300)
+        self.meta_panel.setFixedWidth(340)
         m_layout = QVBoxLayout(self.meta_panel)
         m_layout.setContentsMargins(16, 16, 16, 16)
         m_layout.setSpacing(12)
@@ -439,7 +439,7 @@ class Glyphs_Page(QWidget):
 
         lbl_name = QLabel("Symbol Name:")
         self.input_glyph_name = QLineEdit()
-        self.input_glyph_name.setPlaceholderText("e.g., Sun, Rad_01, Ka")
+        self.input_glyph_name.setPlaceholderText("Type a name (needed to save)  e.g., Sun, Rad_01, Ka")
         m_layout.addWidget(lbl_name)
         m_layout.addWidget(self.input_glyph_name)
 
@@ -593,7 +593,7 @@ class Glyphs_Page(QWidget):
         self.active_group_id = group["id"]
         self.active_glyph_data = glyph
 
-        self.lbl_breadcrumb.setText(f"Groups > {group['name']} > {glyph['name']}")
+        self.lbl_breadcrumb.setText(f"Groups > {group['name']} > {glyph['name'] or '(new glyph)'}")
 
         self.input_glyph_name.setText(glyph["name"])
         self.input_meaning.setText(glyph.get("meaning", "") or "")
@@ -733,13 +733,11 @@ class Glyphs_Page(QWidget):
             self.refresh_gallery()
 
     def create_new_glyph(self, group_id: str, group_name: str):
-        existing = self.glyph_repo.get_glyphs_by_group(group_id)
-        default_name = f"Glyph_{len(existing) + 1}"
-        
+        # no automatic name (Glyph_1, Glyph_2 ...): the name is typed in the detail panel before saving
         glyph_id = self.glyph_repo.create_glyph(
             language_id=self.language_id,
             group_id=group_id,
-            name=default_name,
+            name="",
             meaning="",
             ipa_reading="",
             svg_data="",
@@ -913,7 +911,7 @@ class Glyphs_Page(QWidget):
             lbl_preview.setText("[Empty]")
             lbl_preview.setStyleSheet("color: #aaaaaa; font-size: 11px;")
 
-        lbl_name = ConlangLabel(glyph["name"])
+        lbl_name = ConlangLabel(glyph["name"] or "(unnamed)")
         lbl_name.setStyleSheet("font-weight: bold; font-size: 13px; color: #111111;")
         lbl_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -946,7 +944,7 @@ class Glyphs_Page(QWidget):
         btn_del = QPushButton("🗑")
         btn_del.setStyleSheet("border: none; color: #888888; font-size: 11px;")
         btn_del.setToolTip("Delete Glyph")
-        btn_del.clicked.connect(lambda _, gid=glyph["id"], gname=glyph["name"]: self.confirm_delete_glyph(gid, gname))
+        btn_del.clicked.connect(lambda _, gid=glyph["id"], gname=(glyph["name"] or "(unnamed)"): self.confirm_delete_glyph(gid, gname))
 
         btn_row.addWidget(btn_edit)
         btn_row.addWidget(btn_del)

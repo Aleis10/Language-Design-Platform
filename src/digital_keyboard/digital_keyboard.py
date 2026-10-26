@@ -298,6 +298,10 @@ def build_font_from_strokes(
                 continue
             if getattr(s, "is_eraser", False):
                 continue
+            if getattr(s, "is_filled", False):
+                # square and tip brushes are already a filled shape (many small polygons): no stroker needed
+                entry.append((FilledContour(s.build_fill_path()), -1.0))
+                continue
             entry.append((s.build_path(), s.width))
         glyphs[gname] = entry
     return strokes_to_ttf(glyphs, output_path, family=family, codepoints=codepoints)
