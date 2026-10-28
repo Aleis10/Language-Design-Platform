@@ -4,9 +4,10 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QGridLayout, QPushButton, QLabel, QToolButton,
     QVBoxLayout, QHBoxLayout, QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QListView,
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QSize, QPointF, QEvent
-from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QPen, QColor, QPolygonF
+from PySide6.QtCore import Qt, Signal, QTimer, QSize, QEvent
+from PySide6.QtGui import QFont
 
+from .tool_icons import asset_icon
 from digital_keyboard import (
     glyph_character, register_language_font, has_ppua, track_conlang_widget, track_conlang_combo,
 )
@@ -30,27 +31,6 @@ SPECIAL_KEY_WIDTH = 74
 GLYPH_POINT_SIZE = 22
 TEXT_POINT_SIZE = 13
 
-
-def _backspace_icon(size: int = 30) -> QIcon:
-    # drawn with QPainter so it does not depend on a font having the backspace symbol
-    scale = 2
-    pm = QPixmap(size * scale, size * scale)
-    pm.setDevicePixelRatio(scale)
-    pm.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    k = size / 30.0
-    pen = QPen(QColor("#333333"))
-    pen.setWidthF(2.2 * k)
-    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    p.setPen(pen)
-    p.drawPolygon(QPolygonF([QPointF(3 * k, 15 * k), QPointF(10 * k, 5 * k), QPointF(27 * k, 5 * k),
-                             QPointF(27 * k, 25 * k), QPointF(10 * k, 25 * k)]))
-    p.drawLine(QPointF(15 * k, 11 * k), QPointF(21 * k, 19 * k))
-    p.drawLine(QPointF(21 * k, 11 * k), QPointF(15 * k, 19 * k))
-    p.end()
-    return QIcon(pm)
 
 _TEXT_WIDGETS = (QLineEdit, QTextEdit, QPlainTextEdit)
 
@@ -270,7 +250,7 @@ class OnScreenKeyboard(QWidget):
         self.combo_presets = QComboBox()
         self.combo_presets.setObjectName("OSKPresets")
         self.combo_presets.setView(QListView())          # a list view so the row height can be styled
-        self.combo_presets.setMinimumWidth(230)
+        self.combo_presets.setMinimumWidth(380)
         self.combo_presets.setMaxVisibleItems(15)
         self.combo_presets.setFocusPolicy(Qt.FocusPolicy.NoFocus)   # do not steal focus from the field
         self.combo_presets.setToolTip("Keyboard preset")
@@ -334,7 +314,7 @@ class OnScreenKeyboard(QWidget):
         # Backspace sits right after the "=" key, same size as the other keys
         backspace_btn = QPushButton()
         backspace_btn.setObjectName("Key_Backspace")
-        backspace_btn.setIcon(_backspace_icon(30))
+        backspace_btn.setIcon(asset_icon("backspace.svg"))
         backspace_btn.setIconSize(QSize(30, 30))
         backspace_btn.setToolTip("Backspace")
         backspace_btn.setMinimumHeight(KEY_HEIGHT)

@@ -12,8 +12,8 @@ import tempfile
 import time
 from typing import Any, Dict, List, Optional
 
-from PySide6.QtCore import QObject, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal
-from PySide6.QtGui import QBrush, QColor, QIcon, QKeySequence, QPainter, QPixmap, QShortcut
+from PySide6.QtCore import QObject, QSize, Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtGui import QBrush, QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QComboBox, QDialog, QFormLayout,
     QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
@@ -24,6 +24,7 @@ from database.transcribe_db import DEFAULTS
 from digital_keyboard import install_conlang_delegate, track_conlang_widget
 from translation import TranslationEngine
 from translation.speech import WhisperBackend
+from ui.components.tool_icons import asset_icon
 
 from .lexicon_page import add_entry_via_dialog
 
@@ -31,27 +32,6 @@ UNKNOWN_CHOICES = [("Show as [word]", "bracket"), ("Keep the English word", "kee
 
 # Whisper model used for speech to text (downloaded on first use, then works offline)
 WHISPER_MODEL = "base.en"
-
-
-def _record_icon(recording: bool, size: int = 22) -> QIcon:
-    # record = red dot, recording = white stop square (the button turns red); drawn, so no icon file is needed
-    scale = 2
-    pm = QPixmap(size * scale, size * scale)
-    pm.setDevicePixelRatio(scale)
-    pm.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setPen(Qt.PenStyle.NoPen)
-    if recording:
-        p.setBrush(QColor("#ffffff"))
-        inset = size * 0.28
-        p.drawRoundedRect(QRectF(inset, inset, size - 2 * inset, size - 2 * inset), 2, 2)
-    else:
-        p.setBrush(QColor("#d9534f"))
-        inset = size * 0.18
-        p.drawEllipse(QRectF(inset, inset, size - 2 * inset, size - 2 * inset))
-    p.end()
-    return QIcon(pm)
 
 
 class MicRecorder(QObject):
@@ -268,7 +248,7 @@ class TranscribePage(QWidget):
         top.addSpacing(12)
         self.btn_record = QPushButton()
         self.btn_record.setObjectName("TrRecord")
-        self.btn_record.setIcon(_record_icon(False))
+        self.btn_record.setIcon(asset_icon("record.svg"))
         self.btn_record.setIconSize(QSize(22, 22))
         self.btn_record.setFixedSize(36, 36)
         self.btn_record.setToolTip("Record speech (English). Click again to stop.")
@@ -310,7 +290,7 @@ class TranscribePage(QWidget):
         row.addWidget(self.lbl_info)
         lay.addLayout(row)
 
-        lay.addWidget(self._section("Constructed language (ConLang)"))
+        lay.addWidget(self._section("Conlang"))
         self.output_text = QPlainTextEdit()
         self.output_text.setReadOnly(True)
         self.output_text.setFixedHeight(84)
@@ -537,7 +517,7 @@ class TranscribePage(QWidget):
         return self._worker is not None and self._worker.isRunning()
 
     def _set_record_button(self, recording: bool) -> None:
-        self.btn_record.setIcon(_record_icon(recording))
+        self.btn_record.setIcon(asset_icon("record_stop.svg" if recording else "record.svg"))
         self.btn_record.setProperty("recording", recording)
         self.btn_record.setToolTip("Stop recording" if recording else "Record speech (English). Click again to stop.")
         self.btn_record.style().unpolish(self.btn_record)   # re-apply the stylesheet for the new property

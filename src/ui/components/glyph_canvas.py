@@ -18,7 +18,7 @@ from PySide6.QtSvg import QSvgRenderer
 from .bezier_fit import fit_chain, chain_to_polyline
 from .brush_math import BRUSHES, BRUSH_LABELS, brush_polygons, polygons_to_svg_path
 from .flow_layout import FlowLayout
-from .tool_icons import tool_icon
+from .tool_icons import asset_icon
 from .canvas_math import (
     stroke_hit, rotate_points, scale_points, translate_points, union_bounds, bounds_center,
     angle_delta, snap_value, snap_angle, scale_ratio, center_offset, fit_transform, parse_number,
@@ -904,10 +904,10 @@ class CanvasStudioToolBar(QWidget):
         flow = FlowLayout(self, margin=8, h_spacing=14, v_spacing=6)
 
         # tools
-        self.btn_select = self._tool_button("Select", "select", "Select strokes. Then R rotate, S scale, G move, Delete removes.")
-        self.btn_pen = self._tool_button("Pen", "pen", "Draw freehand")
-        self.btn_line = self._tool_button("Line", "line", "Drag to draw a straight line. Hold Shift to keep the angle on 15° steps.")
-        self.btn_eraser = self._tool_button("Eraser", "eraser", "Drag over a stroke to remove it. The Thickness slider sets the eraser size.")
+        self.btn_select = self._tool_button("Select", "select.svg", "Select strokes. Then R rotate, S scale, G move, Delete removes.")
+        self.btn_pen = self._tool_button("Pen", "pen.svg", "Draw freehand")
+        self.btn_line = self._tool_button("Line", "line.svg", "Drag to draw a straight line. Hold Shift to keep the angle on 15° steps.")
+        self.btn_eraser = self._tool_button("Eraser", "eraser.svg", "Drag over a stroke to remove it. The Thickness slider sets the eraser size.")
         self.btn_pen.setChecked(True)
         self.tool_group = QButtonGroup(self)
         for tool, button in (("select", self.btn_select), ("pen", self.btn_pen),
@@ -965,7 +965,7 @@ class CanvasStudioToolBar(QWidget):
         self.btn_redo.setToolTip("Redo (Ctrl+Y)")
         self.btn_redo.clicked.connect(self.canvas.redo)
         self.btn_clear = QPushButton(" Clear")
-        self.btn_clear.setIcon(tool_icon("trash", 16, "#d9534f"))
+        self.btn_clear.setIcon(asset_icon("Trash.svg"))
         self.btn_clear.setToolTip("Clear all strokes on canvas")
         self.btn_clear.setStyleSheet("color: #d9534f;")
         self.btn_clear.clicked.connect(self._confirm_clear)
@@ -1027,9 +1027,9 @@ class CanvasStudioToolBar(QWidget):
         lbl.setStyleSheet("font-size: 12px; color: #555555;")
         return lbl
 
-    def _tool_button(self, text: str, icon_name: str, tip: str) -> QPushButton:
+    def _tool_button(self, text: str, icon_file: str, tip: str) -> QPushButton:
         button = QPushButton(" " + text)
-        button.setIcon(tool_icon(icon_name, 18, "#1a1a1a"))      # simple black icon
+        button.setIcon(asset_icon(icon_file))                    # simple black icon from assets/icons
         button.setIconSize(QSize(18, 18))
         button.setToolTip(tip)
         button.setCheckable(True)

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+  <g transform="translate(10 9.5) rotate(-40)" stroke="#1a1a1a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="-8" y="-4.2" width="16" height="8.4" rx="1.6" fill="none"/>
+    <rect x="0" y="-4.2" width="8" height="8.4" fill="#1a1a1a"/>
+  </g>
+  <line x1="3" y1="17.5" x2="17" y2="17.5" stroke="#1a1a1a" stroke-width="1.4" stroke-linecap="round"/>
+</svg>
