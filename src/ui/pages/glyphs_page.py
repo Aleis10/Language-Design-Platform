@@ -389,9 +389,6 @@ class Glyphs_Page(QWidget):
         self.lbl_breadcrumb = ConlangLabel("Groups > Radicals > Sun")
         self.lbl_breadcrumb.setStyleSheet("font-size: 14px; font-weight: bold; color: #333333;")
 
-        self.btn_export_single_svg = QPushButton("⤓ Export SVG")
-        self.btn_export_single_svg.setStyleSheet("padding: 6px 14px; border: 1px solid #cccccc; border-radius: 4px; background: white;")
-        self.btn_export_single_svg.clicked.connect(self.export_active_svg)
 
         btn_save = QPushButton("💾 Save Glyph")
         btn_save.setObjectName("BtnSaveGlyph")
@@ -401,7 +398,6 @@ class Glyphs_Page(QWidget):
         h_layout.addSpacing(8)
         h_layout.addWidget(self.lbl_breadcrumb)
         h_layout.addStretch()
-        h_layout.addWidget(self.btn_export_single_svg)
         h_layout.addWidget(btn_save)
 
         studio_layout.addWidget(header)
@@ -660,6 +656,7 @@ class Glyphs_Page(QWidget):
         if notify:
             QMessageBox.information(self, "Saved", f"Glyph '{name}' saved successfully!")
 
+    # no button for this any more: it is meant to be called from the File menu later
     def export_active_svg(self):
         svg_data = self.canvas.to_svg()
         name = self.input_glyph_name.text().strip() or "glyph"

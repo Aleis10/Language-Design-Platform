@@ -12,6 +12,8 @@ from digital_keyboard import (
     apply_conlang_to_fields, install_conlang_delegate, track_conlang_widget, track_conlang_combo,
 )
 from PySide6.QtSvg import QSvgRenderer
+from ui.components.typeface_dialog import TypefaceDialog
+from database.typeface_db import TypefaceRepository
 
 try:
     from database.keyboard_db import KeyboardRepository
@@ -339,6 +341,11 @@ class KeyboardPage(QWidget):
         self.lbl_count.setObjectName("KbdCount")
         toolbar.addWidget(self.lbl_count)
         toolbar.addStretch()
+        btn_typeface = QPushButton("Typeface...")
+        btn_typeface.setToolTip("Change how the language font looks: scale, thickness and spacing, "
+                                "with a live preview")
+        btn_typeface.clicked.connect(self._open_typeface)
+        toolbar.addWidget(btn_typeface)
         btn_save = QPushButton("Save")
         btn_save.setObjectName("KbdSave")
         btn_save.setToolTip("Save this preset's mappings and rebuild the language font "
@@ -561,7 +568,7 @@ class KeyboardPage(QWidget):
             fonts_dir = get_fonts_dir(self.data_dir) if self.data_dir else self.data_dir
             
             # Export font
-            result = export_language_font(glyph_rows, fonts_dir)
+            result = export_language_font(glyph_rows, fonts_dir, style=self._typeface_style())
             print(f"[DEBUG-kbd3] Font exported: {result.ttf_path}")
             
             # Verify TTF was created
@@ -671,6 +678,67 @@ class KeyboardPage(QWidget):
                     btn.setToolTip("")
         self.lbl_count.setText(f"{mapped} keys mapped")
         self._rebuild_combo_rows()
+
+    # typeface (how the language font looks)
+
+    def _typeface_repo(self) -> TypefaceRepository:
+        if getattr(self, "_typeface_repository", None) is None:
+            self._typeface_repository = TypefaceRepository(self.keyboard_repo.db_manager)
+        return self._typeface_repository
+
+    def _typeface_style(self) -> Dict[str, Any]:
+        from digital_keyboard import normalize_style
+        try:
+            return normalize_style(self._typeface_repo().get(self.language_id))
+        except Exception as exc:
+            print(f"[DEBUG-kbd3] Could not read the typeface settings: {exc}")
+            return normalize_style(None)
+
+    def _open_typeface(self):
+        from digital_keyboard import get_fonts_dir
+        try:
+            glyph_rows = self.glyph_repo.get_all_glyphs(self.language_id)
+        except Exception as exc:
+            QMessageBox.warning(self, "Typeface", f"Could not read the glyphs:\n{exc}")
+            return
+        if not glyph_rows:
+            QMessageBox.information(self, "No Glyphs", "Draw some logograms first, then come back to the Typeface.")
+            return
+        fonts_dir = get_fonts_dir(self.data_dir) if self.data_dir else self.data_dir
+        dialog = TypefaceDialog(glyph_rows, fonts_dir, self._typeface_style(), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            self._typeface_repo().save(self.language_id, dialog.style())
+        except Exception as exc:
+            QMessageBox.critical(self, "Typeface", f"Could not save the settings:\n{exc}")
+            return
+        self._rebuild_font_only()
+
+    def _rebuild_font_only(self):
+        # rebuild and register the language font with the saved typeface settings (key assignments are not touched)
+        try:
+            from digital_keyboard import export_language_font, get_fonts_dir, register_language_font
+            glyph_rows = self.glyph_repo.get_all_glyphs(self.language_id)
+            fonts_dir = get_fonts_dir(self.data_dir) if self.data_dir else self.data_dir
+            result = export_language_font(glyph_rows, fonts_dir, style=self._typeface_style())
+            registered = register_language_font(self.data_dir)
+            if not registered:
+                QMessageBox.warning(
+                    self, "Font Registration Failed",
+                    f"The font was built but Qt could not register it.\n\nPath: {result.ttf_path}")
+            self._load_font_mapping()
+            QMessageBox.information(
+                self, "Typeface Saved",
+                f"The language font was rebuilt with the new look ({result.num_glyphs} glyphs).")
+            if callable(self.on_saved):
+                self.on_saved()
+        except Exception as exc:
+            import traceback
+            print(f"[DEBUG-kbd3] Typeface rebuild failed: {exc}")
+            print(traceback.format_exc())
+            QMessageBox.critical(self, "Typeface", f"Could not rebuild the font:\n{exc}")
+        self.refresh()
 
     # dead key combinations
 
