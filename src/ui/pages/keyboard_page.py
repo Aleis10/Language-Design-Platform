@@ -341,7 +341,7 @@ class KeyboardPage(QWidget):
         self.lbl_count.setObjectName("KbdCount")
         toolbar.addWidget(self.lbl_count)
         toolbar.addStretch()
-        btn_typeface = QPushButton("Typeface...")
+        btn_typeface = QPushButton("Font Style...")
         btn_typeface.setToolTip("Change how the language font looks: scale, thickness and spacing, "
                                 "with a live preview")
         btn_typeface.clicked.connect(self._open_typeface)
@@ -679,7 +679,7 @@ class KeyboardPage(QWidget):
         self.lbl_count.setText(f"{mapped} keys mapped")
         self._rebuild_combo_rows()
 
-    # typeface (how the language font looks)
+    # font style (how the language font looks)
 
     def _typeface_repo(self) -> TypefaceRepository:
         if getattr(self, "_typeface_repository", None) is None:
@@ -691,7 +691,7 @@ class KeyboardPage(QWidget):
         try:
             return normalize_style(self._typeface_repo().get(self.language_id))
         except Exception as exc:
-            print(f"[DEBUG-kbd3] Could not read the typeface settings: {exc}")
+            print(f"[DEBUG-kbd3] Could not read the font style settings: {exc}")
             return normalize_style(None)
 
     def _open_typeface(self):
@@ -699,10 +699,10 @@ class KeyboardPage(QWidget):
         try:
             glyph_rows = self.glyph_repo.get_all_glyphs(self.language_id)
         except Exception as exc:
-            QMessageBox.warning(self, "Typeface", f"Could not read the glyphs:\n{exc}")
+            QMessageBox.warning(self, "Font Style", f"Could not read the glyphs:\n{exc}")
             return
         if not glyph_rows:
-            QMessageBox.information(self, "No Glyphs", "Draw some logograms first, then come back to the Typeface.")
+            QMessageBox.information(self, "No Glyphs", "Draw some logograms first, then come back to Font Style.")
             return
         fonts_dir = get_fonts_dir(self.data_dir) if self.data_dir else self.data_dir
         dialog = TypefaceDialog(glyph_rows, fonts_dir, self._typeface_style(), self)
@@ -711,12 +711,12 @@ class KeyboardPage(QWidget):
         try:
             self._typeface_repo().save(self.language_id, dialog.style())
         except Exception as exc:
-            QMessageBox.critical(self, "Typeface", f"Could not save the settings:\n{exc}")
+            QMessageBox.critical(self, "Font Style", f"Could not save the settings:\n{exc}")
             return
         self._rebuild_font_only()
 
     def _rebuild_font_only(self):
-        # rebuild and register the language font with the saved typeface settings (key assignments are not touched)
+        # rebuild and register the language font with the saved font style settings (key assignments are not touched)
         try:
             from digital_keyboard import export_language_font, get_fonts_dir, register_language_font
             glyph_rows = self.glyph_repo.get_all_glyphs(self.language_id)
@@ -729,15 +729,15 @@ class KeyboardPage(QWidget):
                     f"The font was built but Qt could not register it.\n\nPath: {result.ttf_path}")
             self._load_font_mapping()
             QMessageBox.information(
-                self, "Typeface Saved",
-                f"The language font was rebuilt with the new look ({result.num_glyphs} glyphs).")
+                self, "Font Style Saved",
+                f"The language font was rebuilt with the new style ({result.num_glyphs} glyphs).")
             if callable(self.on_saved):
                 self.on_saved()
         except Exception as exc:
             import traceback
-            print(f"[DEBUG-kbd3] Typeface rebuild failed: {exc}")
+            print(f"[DEBUG-kbd3] Font style rebuild failed: {exc}")
             print(traceback.format_exc())
-            QMessageBox.critical(self, "Typeface", f"Could not rebuild the font:\n{exc}")
+            QMessageBox.critical(self, "Font Style", f"Could not rebuild the font:\n{exc}")
         self.refresh()
 
     # dead key combinations

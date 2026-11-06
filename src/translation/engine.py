@@ -13,7 +13,7 @@ import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .analyzer import SimpleAnalyzer
-from .inflect import inflect, prepare_grids, prepare_rules
+from .inflect import inflect, prepare_grids, prepare_irregulars, prepare_rules
 from .lookup import MAX_PHRASE_WORDS, LexiconIndex
 from .models import Analysis, Candidate, Token, Translation, WordResult
 
@@ -28,13 +28,16 @@ class TranslationEngine:
         rules: Sequence[Dict[str, Any]] = (),
         categories: Sequence[Dict[str, Any]] = (),
         paradigms: Sequence[Dict[str, Any]] = (),
+        feature_values: Sequence[Dict[str, Any]] = (),    # the language's feature values (with their English triggers)
+        irregulars: Sequence[Dict[str, Any]] = (),        # "this word + these values = this exact form"
         analyzer=None,
         unknown: str = "bracket",          # "bracket" -> [word]   "keep" -> word   "skip" -> omitted
         ignore: Iterable[str] = (),        # English words to drop when the lexicon has no entry for them
     ):
         self.index = LexiconIndex(entries)
-        self.rules = prepare_rules(rules, categories)
+        self.rules = prepare_rules(rules, categories, feature_values)
         self.grids = prepare_grids(paradigms)
+        self.irregulars = prepare_irregulars(irregulars, feature_values)
         self.analyzer = analyzer or SimpleAnalyzer()
         self.unknown = unknown
         self.ignore = {w.strip().lower() for w in ignore if w.strip()}
@@ -42,11 +45,16 @@ class TranslationEngine:
     # -- construction from the app's repositories --------------------------
     @classmethod
     def from_repos(cls, lexicon_repo, grammar_repo, language_id: str, **kwargs) -> "TranslationEngine":
+        # the feature and irregular tables are newer: an older repository object may not have them
+        get_values = getattr(grammar_repo, "get_feature_values", None)
+        get_irregulars = getattr(grammar_repo, "get_irregulars", None)
         return cls(
             entries=lexicon_repo.get_all_entries(language_id),
             rules=grammar_repo.get_rules(language_id),
             categories=grammar_repo.get_categories(language_id),
             paradigms=grammar_repo.get_paradigms(language_id),
+            feature_values=get_values(language_id) if get_values else (),
+            irregulars=get_irregulars(language_id) if get_irregulars else (),
             **kwargs,
         )
 
@@ -144,7 +152,7 @@ class TranslationEngine:
             word.notes.append(
                 "several entries match: " + ", ".join(c.entry.get("headword", "?") for c in [top] + ties)
             )
-        res = inflect(top.entry, hyp.lemma, hyp.pos, hyp.features, self.rules, self.grids)
+        res = inflect(top.entry, hyp.lemma, hyp.pos, hyp.features, self.rules, self.grids, self.irregulars)
         word.form, word.applied, word.missing = res.form, res.applied, res.missing
         word.source = res.source
         word.notes.extend(res.notes)
@@ -183,7 +191,10 @@ class TranslationEngine:
             elif w.status == "ambiguous":
                 warnings.append(f"'{w.english}' is ambiguous: " + w.notes[0].split(": ", 1)[-1])
             if w.missing:
-                warnings.append(f"'{w.english}': no rule or grid for {', '.join(w.missing)}")
+                # when rules exist but their conditions did not fit the stem, say that instead of "no rule"
+                why = next((n for n in w.notes if "check their conditions" in n), None)
+                warnings.append(f"'{w.english}': {why}" if why else
+                                f"'{w.english}': no rule or grid for {', '.join(w.missing)}")
         return Translation(
             source_text=source, words=words, conlang_text=text,
             gloss_text=" ".join(gloss_parts), warnings=list(dict.fromkeys(warnings)),

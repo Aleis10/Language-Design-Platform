@@ -11,6 +11,7 @@ Everything here is plain Python over plain dicts, so it is easy to test.
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
@@ -43,6 +44,7 @@ class FeatureRequest:
     name: str                      # human name, e.g. "plural"
     aliases: List[Alias]           # tags that can express it, best first
     required: bool = True          # False = apply if the language has it, stay silent if not
+    trigger: str = ""              # key a feature value in the grammar can listen for: "plural", "past", ...
 
     @property
     def display(self) -> str:
@@ -70,26 +72,26 @@ def requested_features(pos: str, feats: Dict[str, str]) -> List[FeatureRequest]:
     out: List[FeatureRequest] = []
     if cls in ("NOUN", "PRON", None):
         if f.get("Number") == "Plur" and cls != "VERB":
-            out.append(FeatureRequest("plural", list(PLURAL)))
+            out.append(FeatureRequest("plural", list(PLURAL), trigger="plural"))
         elif f.get("Number") == "Sing" and cls in ("NOUN", "PRON"):
-            out.append(FeatureRequest("singular", list(SINGULAR), required=False))
+            out.append(FeatureRequest("singular", list(SINGULAR), required=False, trigger="singular"))
     if cls == "VERB":
         form, tense = f.get("VerbForm"), f.get("Tense")
         if form == "Part" and tense == "Past":
-            out.append(FeatureRequest("past participle", list(PAST_PTCP)))
+            out.append(FeatureRequest("past participle", list(PAST_PTCP), trigger="past_participle"))
         elif f.get("Aspect") == "Prog" or (form in ("Part", "Ger") and tense == "Pres"):
-            out.append(FeatureRequest("progressive", list(PROGRESSIVE)))
+            out.append(FeatureRequest("progressive", list(PROGRESSIVE), trigger="progressive"))
         elif tense == "Past":
-            out.append(FeatureRequest("past", list(PAST_TAGS)))
+            out.append(FeatureRequest("past", list(PAST_TAGS), trigger="past"))
         elif tense == "Pres" and form in (None, "Fin"):
             if f.get("Person") == "3" and f.get("Number") == "Sing":
-                out.append(FeatureRequest("3rd person singular", list(THIRD_SG), required=False))
-            out.append(FeatureRequest("present", list(PRESENT), required=False))
+                out.append(FeatureRequest("3rd person singular", list(THIRD_SG), required=False, trigger="3sg"))
+            out.append(FeatureRequest("present", list(PRESENT), required=False, trigger="present"))
     if cls == "ADJ" or cls == "ADV":
         if f.get("Degree") == "Cmp":
-            out.append(FeatureRequest("comparative", list(COMPARATIVE)))
+            out.append(FeatureRequest("comparative", list(COMPARATIVE), trigger="comparative"))
         elif f.get("Degree") == "Sup":
-            out.append(FeatureRequest("superlative", list(SUPERLATIVE)))
+            out.append(FeatureRequest("superlative", list(SUPERLATIVE), trigger="superlative"))
     return out
 
 
@@ -183,6 +185,32 @@ def apply_affix(stem: str, pattern: str, affix_type: str = "") -> Tuple[Optional
 
 
 # ---------------------------------------------------------------------------
+# Rule conditions
+# ---------------------------------------------------------------------------
+
+CONDITION_TYPES = ("", "ends_with", "starts_with", "not_ends_with", "not_starts_with")
+
+
+def condition_matches(stem: str, ctype: str, cvalue: str) -> bool:
+    """Does the stem fit a rule's condition?  `cvalue` is a list of letters or letter groups separated by
+    commas or spaces, e.g. "a, e, i, o, u" or "ng".  No condition (or an empty list) always fits."""
+    ctype = (ctype or "").strip().lower()
+    values = [v for v in re.split(r"[,\s]+", (cvalue or "").strip().lower()) if v]
+    if not ctype or not values:
+        return True
+    s = (stem or "").lower()
+    if ctype == "ends_with":
+        return any(s.endswith(v) for v in values)
+    if ctype == "starts_with":
+        return any(s.startswith(v) for v in values)
+    if ctype == "not_ends_with":
+        return not any(s.endswith(v) for v in values)
+    if ctype == "not_starts_with":
+        return not any(s.startswith(v) for v in values)
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Prepared grammar data
 # ---------------------------------------------------------------------------
 
@@ -206,15 +234,35 @@ class PreparedRule:
     tag_norm: str
     position: int
     hint: Optional[Set[str]]
+    value_id: str = ""             # the feature value this rule expresses ("" = an older rule that only has a tag)
+    trigger: str = ""              # the English trigger of that value ("plural", "past", ...); "" = pick by hand
+    condition_type: str = ""
+    condition_value: str = ""
 
 
-def prepare_rules(rules: Sequence[Dict[str, Any]], categories: Sequence[Dict[str, Any]]) -> List[PreparedRule]:
+def _class_set(text: Any) -> Optional[Set[str]]:
+    if isinstance(text, (list, tuple, set)):
+        items = [str(t) for t in text]
+    else:
+        items = re.split(r"[,\s]+", str(text or ""))
+    classes = {t.strip().upper() for t in items if t.strip()}
+    return classes or None
+
+
+def prepare_rules(rules: Sequence[Dict[str, Any]], categories: Sequence[Dict[str, Any]],
+                  values: Sequence[Dict[str, Any]] = ()) -> List[PreparedRule]:
     cat_names = {c.get("id"): c.get("name", "") for c in categories}
+    values_by_id = {str(v.get("id")): v for v in values or []}
     prepared = []
     for r in rules:
-        tag = (r.get("gloss_tag") or "").strip()
+        value = values_by_id.get(str(r.get("value_id") or ""))
+        tag = ((value.get("tag") if value else r.get("gloss_tag")) or "").strip()
         if not tag:
             continue
+        # which word classes: the rule's own choice, else its category name, else the feature's word classes
+        hint = (_class_set(r.get("word_class"))
+                or pos_hint(cat_names.get(r.get("category_id"), ""))
+                or (_class_set(value.get("word_classes")) if value else None))
         prepared.append(PreparedRule(
             id=str(r.get("id", "")),
             name=r.get("name", "") or tag,
@@ -223,9 +271,42 @@ def prepare_rules(rules: Sequence[Dict[str, Any]], categories: Sequence[Dict[str
             gloss_tag=tag.upper(),
             tag_norm=norm_tag(tag),
             position=int(r.get("position") or 0),
-            hint=pos_hint(cat_names.get(r.get("category_id"), "")),
+            hint=hint,
+            value_id=str(value.get("id")) if value else "",
+            trigger=((value.get("trigger") or "") if value else ""),
+            condition_type=(r.get("condition_type") or "").strip().lower(),
+            condition_value=r.get("condition_value") or "",
         ))
     return sorted(prepared, key=lambda r: r.position)
+
+
+@dataclass
+class PreparedIrregular:
+    entry_id: str
+    triggers: Set[str]
+    tags: List[str]
+    form: str
+
+
+def prepare_irregulars(irregulars: Sequence[Dict[str, Any]], values: Sequence[Dict[str, Any]]) -> List[PreparedIrregular]:
+    """An irregular is 'this word + these feature values = this exact form' (go + past = went)."""
+    values_by_id = {str(v.get("id")): v for v in values or []}
+    out = []
+    for irr in irregulars or []:
+        ids = irr.get("value_ids") or []
+        if isinstance(ids, str):
+            try:
+                ids = json.loads(ids)
+            except ValueError:
+                ids = []
+        form = (irr.get("form") or "").strip()
+        entry_id = str(irr.get("entry_id") or "")
+        known = [values_by_id[str(i)] for i in ids if str(i) in values_by_id]
+        triggers = {v.get("trigger") for v in known if v.get("trigger")}
+        if not form or not entry_id or not triggers:
+            continue                      # values with no English trigger cannot be matched automatically
+        out.append(PreparedIrregular(entry_id, triggers, [str(v.get("tag", "")).upper() for v in known], form))
+    return out
 
 
 @dataclass
@@ -319,10 +400,28 @@ def find_grid_form(
     return None
 
 
-def find_rule(req: FeatureRequest, rules: Sequence[PreparedRule], word_class: Optional[str]) -> Optional[PreparedRule]:
+def _class_ok(rule: PreparedRule, word_class: Optional[str]) -> bool:
+    return not (rule.hint and word_class and word_class not in rule.hint)
+
+
+def find_rule(req: FeatureRequest, rules: Sequence[PreparedRule], word_class: Optional[str],
+              stem: str = "", notes: Optional[List[str]] = None) -> Optional[PreparedRule]:
+    # 1) rules attached to a feature value whose English trigger is what this word needs
+    if req.trigger:
+        attached = [r for r in rules if r.trigger == req.trigger and _class_ok(r, word_class)]
+        fitting = [r for r in attached if condition_matches(stem, r.condition_type, r.condition_value)]
+        if fitting:
+            hinted = [r for r in fitting if r.hint and word_class in r.hint]
+            return (hinted or fitting)[0]
+        if attached:
+            if notes is not None:
+                notes.append(f"{req.name}: rules exist, but none fits the stem '{stem}' (check their conditions)")
+            return None
+    # 2) older rules that only have a tag: matched by how the tag is spelled
     for alias in req.aliases:
-        matches = [r for r in rules if alias_matches_rule(alias, r.tag_norm)
-                   and not (r.hint and word_class and word_class not in r.hint)]
+        matches = [r for r in rules if not r.value_id and alias_matches_rule(alias, r.tag_norm)
+                   and _class_ok(r, word_class)
+                   and condition_matches(stem, r.condition_type, r.condition_value)]
         if matches:
             hinted = [r for r in matches if r.hint and word_class in r.hint]
             return (hinted or matches)[0]
@@ -345,6 +444,7 @@ class InflectResult:
 def inflect(
     entry: Dict[str, Any], lemma: str, pos: str, feats: Dict[str, str],
     rules: Sequence[PreparedRule], grids: Sequence[PreparedGrid],
+    irregulars: Sequence[PreparedIrregular] = (),
 ) -> InflectResult:
     stem = (entry.get("headword") or "").strip()
     reqs = requested_features(pos, feats)
@@ -357,11 +457,35 @@ def inflect(
     if entry_class and word_class and entry_class != word_class:
         result.notes.append(f"English reads as {word_class} but the entry is {entry_class}")
 
-    # 1) paradigm grid: all features, then only the required ones
+    # all features first, then only the required ones
     tries = [list(reqs)]
     required_only = [r for r in reqs if r.required]
     if required_only and len(required_only) != len(reqs):
         tries.append(required_only)
+
+    # 1) an irregular form listed for this very word
+    entry_id = str(entry.get("id") or "")
+    own = [i for i in irregulars if entry_id and i.entry_id == entry_id]
+    for subset in tries:
+        wanted = {r.trigger for r in subset if r.trigger}
+        must = {r.trigger for r in subset if r.trigger and r.required}
+        # an irregular fits when it covers everything required and asks for nothing the word does not need;
+        # the most specific one (the most values) wins
+        fits = [i for i in own if i.triggers <= wanted and must <= i.triggers]
+        hit = max(fits, key=lambda i: len(i.triggers), default=None)
+        if hit:
+            text = hit.form
+            if text.startswith("-") or text.endswith("-"):
+                new, note = apply_affix(stem, text)
+                if new is None:
+                    continue
+                if note:
+                    result.notes.append(note)
+                text = new
+            result.form, result.source, result.applied = text, "irregular", list(hit.tags)
+            return result
+
+    # 2) paradigm grid (older way): all features, then only the required ones
     for subset in tries:
         hit = find_grid_form(grids, entry, lemma, word_class, subset)
         if hit:
@@ -379,10 +503,10 @@ def inflect(
                 result.applied = shown
                 return result
 
-    # 2) affix rules, in the order the rules are listed
+    # 3) affix rules, in the order the rules are listed
     chosen: List[Tuple[PreparedRule, FeatureRequest]] = []
     for r in reqs:
-        rule = find_rule(r, rules, word_class)
+        rule = find_rule(r, rules, word_class, stem, result.notes)
         if rule is None:
             if r.required:
                 result.missing.append(r.display)

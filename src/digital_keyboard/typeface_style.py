@@ -5,16 +5,15 @@ from typing import Any, Callable, Dict, Optional, Tuple
 #
 #   scale         size of each glyph inside its slot, in percent (the slot itself stays the same)
 #   thickness     stroke thickness, in percent (round, square and tip strokes; imported SVG outlines cannot be thickened)
-#   glyph_gap     extra room between typed glyphs, in font units (1000 = the full slot); negative = tighter
-#   space_enabled use space_width for the space bar (otherwise spaces come from the normal text font)
-#   space_width   width of a space, in font units
+#   glyph_gap     the "Word gap": extra room between typed glyphs, in font units (1000 = the full slot);
+#                 negative = tighter (each glyph is a word in a logographic script)
+#   space_width   the "Spacebar gap": width of the space bar, in font units
 
 DEFAULT_STYLE: Dict[str, Any] = {
     "scale": 100.0,
     "thickness": 100.0,
     "glyph_gap": 0.0,
-    "space_enabled": False,
-    "space_width": 500.0,
+    "space_width": 300.0,       # close to the width of a normal space, so Latin text barely changes
 }
 
 RANGES: Dict[str, Tuple[float, float]] = {
@@ -37,8 +36,6 @@ def normalize_style(data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
                     style[key] = max(low, min(high, float(data[key])))
                 except (TypeError, ValueError):
                     pass
-        if "space_enabled" in data:
-            style["space_enabled"] = bool(data["space_enabled"])
     return style
 
 
@@ -55,9 +52,8 @@ def advance_width(style: Dict[str, Any], units_per_em: int = 1000) -> int:
     return max(0, min(MAX_ADVANCE, int(round(units_per_em + normalize_style(style)["glyph_gap"]))))
 
 
-def space_advance(style: Dict[str, Any]) -> Optional[int]:
-    s = normalize_style(style)
-    return int(round(s["space_width"])) if s["space_enabled"] else None
+def space_advance(style: Dict[str, Any]) -> int:
+    return int(round(normalize_style(style)["space_width"]))
 
 
 def make_point_transform(style: Dict[str, Any], units_per_em: int = 1000) -> Callable[[float, float], Tuple[float, float]]:

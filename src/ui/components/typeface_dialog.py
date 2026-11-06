@@ -4,18 +4,17 @@ import tempfile
 import traceback
 from typing import Any, Dict, List, Optional
 
-from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QScrollArea, QSlider, QVBoxLayout, QWidget,
+    QDialog, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QScrollArea, QSlider, QVBoxLayout, QWidget,
 )
 
 from digital_keyboard import DEFAULT_STYLE, RANGES, build_preview_font, normalize_style, register_preview_font
 from .flow_layout import FlowLayout
-from .tool_icons import asset_icon
 
-# The Typeface window: change how the language font looks (scale, thickness, gap between glyphs, width of a
-# space) and watch a test text change while you drag. Nothing is saved until Save is pressed. The window
+# The Font Style window: change how the language font looks (scale, thickness, gap between glyphs, width of a
+# space bar) and watch a test text change while you drag. Nothing is saved until Save is pressed. The window
 # blocks the rest of the app while it is open, which keeps it simple.
 
 PREVIEW_DELAY_MS = 250      # the preview is rebuilt this long after the last slider move
@@ -26,7 +25,7 @@ class TypefaceDialog(QDialog):
     def __init__(self, glyph_rows: List[Dict[str, Any]], fonts_dir: str, style: Optional[Dict[str, Any]] = None,
                  parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Typeface")
+        self.setWindowTitle("Font Style")
         self.setModal(True)
         self.resize(780, 700)
         self.glyph_rows = glyph_rows
@@ -55,19 +54,13 @@ class TypefaceDialog(QDialog):
         root.setContentsMargins(16, 14, 16, 14)
         root.setSpacing(10)
 
-        title = QLabel("Typeface")
+        title = QLabel("Font Style")
         title.setObjectName("TfTitle")
         root.addWidget(title)
-        hint = QLabel("Click glyphs or type below to test the text. Move the sliders to change the font; "
-                      "nothing is saved until you press Save.")
-        hint.setObjectName("TfHint")
-        hint.setWordWrap(True)
-        root.addWidget(hint)
 
         # the test text: three lines
         self.test_text = QPlainTextEdit()
         self.test_text.setObjectName("TfTest")
-        self.test_text.setPlaceholderText("Test text: click the glyphs below, or type here.")
         root.addWidget(self.test_text)
 
         # a row of tools for the test text
@@ -78,16 +71,9 @@ class TypefaceDialog(QDialog):
         self.btn_all.clicked.connect(self._insert_all)
         self.btn_space = QPushButton("Space")
         self.btn_space.clicked.connect(lambda: self._insert(" "))
-        self.btn_newline = QPushButton("New line")
-        self.btn_newline.clicked.connect(lambda: self._insert("\n"))
-        self.btn_back = QPushButton()
-        self.btn_back.setIcon(asset_icon("backspace.svg"))
-        self.btn_back.setIconSize(QSize(18, 18))
-        self.btn_back.setToolTip("Backspace")
-        self.btn_back.clicked.connect(self._backspace)
         self.btn_clear = QPushButton("Clear text")
         self.btn_clear.clicked.connect(self.test_text.clear)
-        for b in (self.btn_all, self.btn_space, self.btn_newline, self.btn_back, self.btn_clear):
+        for b in (self.btn_all, self.btn_space, self.btn_clear):
             b.setFocusPolicy(Qt.FocusPolicy.NoFocus)        # the test text keeps the keyboard focus
             tools.addWidget(b)
         tools.addStretch()
@@ -118,17 +104,12 @@ class TypefaceDialog(QDialog):
         self._add_slider(root, "thickness", "Thickness", "% of the stroke width",
                          "Makes every stroke thinner or thicker. Imported SVG outlines cannot be thickened.")
         root.addWidget(self._section("Spacing"))
-        self._add_slider(root, "glyph_gap", "Gap between glyphs", "font units",
-                         "Extra room between typed glyphs. 1000 units is the width of one glyph slot; negative is tighter.")
-        word_row = QHBoxLayout()
-        self.chk_space = QCheckBox("Use a custom word gap")
-        self.chk_space.setToolTip("When on, the space bar uses this width. It also sets the width of spaces in "
-                                  "ordinary text inside fields that use the language font.")
-        self.chk_space.toggled.connect(self._on_space_toggled)
-        word_row.addWidget(self.chk_space)
-        word_row.addStretch()
-        root.addLayout(word_row)
-        self._add_slider(root, "space_width", "Word gap", "font units", "Width of a space")
+        self._add_slider(root, "glyph_gap", "Word gap", "font units",
+                         "Extra room between typed glyphs (each glyph is a word). 1000 units is the width of "
+                         "one glyph slot; negative is tighter.")
+        self._add_slider(root, "space_width", "Spacebar gap", "font units",
+                         "Width of the space bar. It also sets the width of spaces in ordinary text inside "
+                         "fields that use the language font.")
 
         self.lbl_status = QLabel("")
         self.lbl_status.setObjectName("TfStatus")
@@ -188,18 +169,12 @@ class TypefaceDialog(QDialog):
             slider.blockSignals(True)
             slider.setValue(int(round(style[key])))
             slider.blockSignals(False)
-        self.chk_space.blockSignals(True)
-        self.chk_space.setChecked(bool(style["space_enabled"]))
-        self.chk_space.blockSignals(False)
-        self._sliders["space_width"].setEnabled(self.chk_space.isChecked())
         for key in self._sliders:
             self._update_value_label(key)
 
     def style(self) -> Dict[str, Any]:
         # the settings as they are now (always complete and in range)
-        values = {key: float(slider.value()) for key, slider in self._sliders.items()}
-        values["space_enabled"] = self.chk_space.isChecked()
-        return normalize_style(values)
+        return normalize_style({key: float(slider.value()) for key, slider in self._sliders.items()})
 
     def _update_value_label(self, key: str):
         value = self._sliders[key].value()
@@ -212,10 +187,6 @@ class TypefaceDialog(QDialog):
         self.lbl_status.setText("Updating preview...")
         self._timer.start()                                  # rebuild once the slider has stopped moving
 
-    def _on_space_toggled(self, checked: bool):
-        self._sliders["space_width"].setEnabled(checked)
-        self._timer.start()
-
     def _reset(self):
         self._load_style(dict(DEFAULT_STYLE))
         self._timer.start()
@@ -224,12 +195,6 @@ class TypefaceDialog(QDialog):
     def _insert(self, text: str):
         cursor = self.test_text.textCursor()
         cursor.insertText(text)
-        self.test_text.setTextCursor(cursor)
-        self.test_text.setFocus()
-
-    def _backspace(self):
-        cursor = self.test_text.textCursor()
-        cursor.deletePreviousChar()
         self.test_text.setTextCursor(cursor)
         self.test_text.setFocus()
 
@@ -307,7 +272,6 @@ class TypefaceDialog(QDialog):
             QDialog { background-color: #f4f4f4; }
             QLabel { color: #222222; font-size: 12px; }
             QLabel#TfTitle { font-size: 18px; font-weight: bold; color: #111111; }
-            QLabel#TfHint { color: #666666; }
             QLabel#TfSection { font-size: 13px; font-weight: bold; color: #111111; margin-top: 4px; }
             QLabel#TfValue { color: #444444; }
             QLabel#TfStatus { color: #b36b00; }
@@ -321,5 +285,4 @@ class TypefaceDialog(QDialog):
             QPushButton#TfGlyph { padding: 0px; color: #111111; }
             QPushButton#TfSave { background-color: #007acc; color: #ffffff; border-color: #005999; font-weight: bold; }
             QPushButton#TfSave:hover { background-color: #0a8ae0; }
-            QCheckBox { color: #222222; font-size: 12px; }
         """
