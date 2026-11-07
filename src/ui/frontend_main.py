@@ -16,7 +16,7 @@ from .pages.overview import Overview_Page
 from .pages.glyphs_page import Glyphs_Page
 from .pages.lexicon_page import LexiconPage
 from .pages.keyboard_page import KeyboardPage
-from .pages.grammar_page import GrammarPage
+from .pages.grammar_simple_page import GrammarSimplePage
 from .pages.transcribe_page import TranscribePage
 
 try:
@@ -108,8 +108,9 @@ class MainWindow(QMainWindow):
             data_dir=self.session_dir or "",
         )
         self.keyboard_page.on_saved = self._reload_conlang_mappings
-        self.grammar_page = GrammarPage(
+        self.grammar_page = GrammarSimplePage(
             grammar_repo=self.grammar_repo,
+            lexicon_repo=self.lexicon_repo,
             language_id=self.language_id,
         )
         self.transcribe_page = TranscribePage(
@@ -843,8 +844,9 @@ class MainWindow(QMainWindow):
             data_dir=self.session_dir or "",
         )
         self.keyboard_page.on_saved = self._reload_conlang_mappings
-        self.grammar_page = GrammarPage(
+        self.grammar_page = GrammarSimplePage(
             grammar_repo=self.grammar_repo,
+            lexicon_repo=self.lexicon_repo,
             language_id=self.language_id,
         )
         self.transcribe_page = TranscribePage(

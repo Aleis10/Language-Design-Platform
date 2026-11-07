@@ -16,6 +16,7 @@ from .analyzer import SimpleAnalyzer
 from .inflect import inflect, prepare_grids, prepare_irregulars, prepare_rules
 from .lookup import MAX_PHRASE_WORDS, LexiconIndex
 from .models import Analysis, Candidate, Token, Translation, WordResult
+from .word_order import is_default, normalize_order, reorder, unclassified
 
 _NO_SPACE_BEFORE = set(".,;:!?)]}%\u2026")
 _NO_SPACE_AFTER = set("([{")
@@ -33,6 +34,7 @@ class TranslationEngine:
         analyzer=None,
         unknown: str = "bracket",          # "bracket" -> [word]   "keep" -> word   "skip" -> omitted
         ignore: Iterable[str] = (),        # English words to drop when the lexicon has no entry for them
+        word_order: Optional[Dict[str, Any]] = None,   # sentence / noun phrase / adposition order (see word_order.py)
     ):
         self.index = LexiconIndex(entries)
         self.rules = prepare_rules(rules, categories, feature_values)
@@ -41,6 +43,7 @@ class TranslationEngine:
         self.analyzer = analyzer or SimpleAnalyzer()
         self.unknown = unknown
         self.ignore = {w.strip().lower() for w in ignore if w.strip()}
+        self.word_order = normalize_order(word_order)
 
     # -- construction from the app's repositories --------------------------
     @classmethod
@@ -48,6 +51,9 @@ class TranslationEngine:
         # the feature and irregular tables are newer: an older repository object may not have them
         get_values = getattr(grammar_repo, "get_feature_values", None)
         get_irregulars = getattr(grammar_repo, "get_irregulars", None)
+        get_order = getattr(grammar_repo, "get_word_order", None)
+        if get_order and "word_order" not in kwargs:
+            kwargs["word_order"] = get_order(language_id)
         return cls(
             entries=lexicon_repo.get_all_entries(language_id),
             rules=grammar_repo.get_rules(language_id),
@@ -80,7 +86,8 @@ class TranslationEngine:
                 continue
             words.append(self._translate_token(tok, i))
             i += 1
-        return self._assemble(text, words)
+        result = self._assemble(text, words, reordered=reorder(words, self.word_order))
+        return result
 
     def with_choice(self, translation: Translation, index: int, candidate: Candidate) -> Translation:
         """Redo one word of an existing translation using a different lexicon entry.
@@ -161,7 +168,9 @@ class TranslationEngine:
             word.notes.append(f"no rule or grid for {m}; left as dictionary form")
         return word
 
-    def _assemble(self, source: str, words: List[WordResult]) -> Translation:
+    def _assemble(self, source: str, words: List[WordResult], reordered: Optional[List[WordResult]] = None) -> Translation:
+        if reordered is not None:
+            words = reordered
         out_parts: List[str] = []
         gloss_parts: List[str] = []
         warnings: List[str] = []
@@ -195,6 +204,9 @@ class TranslationEngine:
                 why = next((n for n in w.notes if "check their conditions" in n), None)
                 warnings.append(f"'{w.english}': {why}" if why else
                                 f"'{w.english}': no rule or grid for {', '.join(w.missing)}")
+        if not is_default(self.word_order):
+            for w in unclassified(words):
+                warnings.append(f"'{w.english}' has no part of speech in the lexicon, so it is not reordered")
         return Translation(
             source_text=source, words=words, conlang_text=text,
             gloss_text=" ".join(gloss_parts), warnings=list(dict.fromkeys(warnings)),

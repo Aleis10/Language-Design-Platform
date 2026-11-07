@@ -1,0 +1,146 @@
+/* Grammar page (one page) */
+
+QWidget#GsTopBar {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+QLabel#GsTitle {
+    font-size: 16px;
+    font-weight: bold;
+    color: #111111;
+}
+
+QScrollArea#GsScroll, QWidget#GsBody {
+    background-color: palette(window);
+}
+
+QFrame#GsCard {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+}
+
+QFrame#GsCard QLabel {
+    background: transparent;
+    color: #111111;
+}
+
+QLabel#GsSection {
+    font-size: 14px;
+    font-weight: bold;
+    color: #111111;
+}
+
+QLabel#GsSubSection {
+    font-size: 13px;
+    font-weight: bold;
+    color: #111111;
+    margin-top: 10px;
+}
+
+QLabel#GsHint {
+    color: #777777;
+    font-size: 11px;
+}
+
+QLabel#GsCaption {
+    color: #555555;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+QFrame#GsRow {
+    background-color: #f5f7fa;
+    border: 1px solid #e3e7ee;
+    border-radius: 6px;
+}
+
+QFrame#GsRow QLabel {
+    background: transparent;
+    color: #333333;
+}
+
+QLabel#GsColumn {
+    color: #777777;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+/* sentence order buttons */
+QFrame#GsCard QPushButton#GsChoice {
+    background-color: #f5f7fa;
+    border: 1px solid #c8ccd2;
+    border-radius: 5px;
+    padding: 6px 14px;
+    font-weight: bold;
+    color: #333333;
+}
+
+QFrame#GsCard QPushButton#GsChoice:hover {
+    background-color: #eef5fc;
+    border-color: #007acc;
+}
+
+QFrame#GsCard QPushButton#GsChoice:checked {
+    background-color: #007acc;
+    border: 1px solid #007acc;
+    color: #ffffff;
+}
+
+QPushButton#GsRemove {
+    background: transparent;
+    border: none;
+    color: #888888;
+    font-size: 13px;
+}
+
+QPushButton#GsRemove:hover {
+    color: #c0392b;
+    background-color: #fdecea;
+    border-radius: 4px;
+}
+
+QFrame#GsCard QPushButton, QWidget#GsTopBar QPushButton {
+    background-color: #ffffff;
+    color: #111111;
+    border: 1px solid #c8ccd2;
+    border-radius: 5px;
+    padding: 5px 12px;
+}
+
+QFrame#GsCard QPushButton:hover, QWidget#GsTopBar QPushButton:hover {
+    background-color: #eef5fc;
+    border-color: #007acc;
+}
+
+QFrame#GsRow QPushButton#GsRemove {
+    border: none;
+    padding: 0;
+}
+
+QFrame#GsCard QComboBox, QFrame#GsCard QLineEdit {
+    background-color: #ffffff;
+    color: #111111;
+    border: 1px solid #c8ccd2;
+    border-radius: 4px;
+    padding: 3px 6px;
+    min-height: 22px;
+}
+
+QFrame#GsCard QLineEdit:disabled {
+    background-color: #f0f1f3;
+    color: #999999;
+}
+
+QFrame#GsCard QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    color: #111111;
+    selection-background-color: #cfe5ff;
+    selection-color: #111111;
+}
+
+QLabel#GsWarn {
+    color: #b36b00;
+    font-size: 11px;
+}

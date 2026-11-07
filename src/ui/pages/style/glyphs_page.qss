@@ -51,8 +51,8 @@ QFrame.glyph-tile {
     border-radius: 8px;
     min-width: 140px;
     max-width: 160px;
-    min-height: 180px;
-    max-height: 200px;
+    min-height: 190px;
+    max-height: 400px;   /* tall enough for a tall name or the IPA badge row, so nothing is squeezed together */
 }
 
 QFrame.glyph-tile:hover {
@@ -67,8 +67,8 @@ QFrame.glyph-tile-add {
     border-radius: 8px;
     min-width: 140px;
     max-width: 160px;
-    min-height: 180px;
-    max-height: 200px;
+    min-height: 190px;
+    max-height: 400px;   /* tall enough for a tall name or the IPA badge row, so nothing is squeezed together */
 }
 
 QFrame.glyph-tile-add:hover {

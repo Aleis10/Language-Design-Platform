@@ -123,6 +123,15 @@ class GrammarRepository:
                 ON grammar_irregulars(language_id, entry_id);
             """)
 
+            # word order of the language (one JSON row per language)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS grammar_word_order (
+                    language_id TEXT PRIMARY KEY,
+                    data TEXT NOT NULL DEFAULT '{}',
+                    FOREIGN KEY (language_id) REFERENCES languages (id) ON DELETE CASCADE
+                );
+            """)
+
             # Migration: add missing columns for existing projects
             cursor.execute("PRAGMA table_info(grammar_rules);")
             existing_cols = {row["name"] for row in cursor.fetchall()}
@@ -573,3 +582,23 @@ class GrammarRepository:
     def delete_irregular(self, irregular_id: str):
         with self.db_manager.get_connection() as conn:
             conn.execute("DELETE FROM grammar_irregulars WHERE id = ?;", (irregular_id,))
+
+    # ------------------------------------------------------------------ word order
+    def get_word_order(self, language_id: str) -> Dict[str, Any]:
+        from translation.word_order import normalize_order
+        with self.db_manager.get_connection() as conn:
+            row = conn.execute("SELECT data FROM grammar_word_order WHERE language_id = ?;", (language_id,)).fetchone()
+        try:
+            data = json.loads(row["data"]) if row else {}
+        except (TypeError, ValueError):
+            data = {}
+        return normalize_order(data)
+
+    def set_word_order(self, language_id: str, order: Dict[str, Any]) -> None:
+        from translation.word_order import normalize_order
+        with self.db_manager.get_connection() as conn:
+            conn.execute(
+                "INSERT INTO grammar_word_order (language_id, data) VALUES (?, ?) "
+                "ON CONFLICT(language_id) DO UPDATE SET data = excluded.data;",
+                (language_id, json.dumps(normalize_order(order))),
+            )
