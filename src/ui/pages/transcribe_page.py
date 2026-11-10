@@ -28,6 +28,11 @@ from ui.components.tool_icons import asset_icon
 
 from .lexicon_page import add_entry_via_dialog
 
+try:
+    from ui.components.button_styles import set_role
+except ImportError:
+    from ..components.button_styles import set_role
+
 UNKNOWN_CHOICES = [("Show as [word]", "bracket"), ("Keep the English word", "keep"), ("Leave it out", "skip")]
 
 # Whisper model used for speech to text (downloaded on first use, then works offline)
@@ -138,8 +143,10 @@ class _ChooseEntryDialog(QDialog):
         row = QHBoxLayout()
         row.addStretch()
         cancel = QPushButton("Cancel")
+        set_role(cancel, "neutral")
         cancel.clicked.connect(self.reject)
         ok = QPushButton("Use this word")
+        set_role(ok, "success")
         ok.setObjectName("TrPrimary")
         ok.clicked.connect(self.accept)
         row.addWidget(cancel)
@@ -178,8 +185,10 @@ class _SettingsDialog(QDialog):
         row = QHBoxLayout()
         row.addStretch()
         cancel = QPushButton("Cancel")
+        set_role(cancel, "neutral")
         cancel.clicked.connect(self.reject)
         save = QPushButton("Save")
+        set_role(save, "success")
         save.setObjectName("TrPrimary")
         save.clicked.connect(self.accept)
         row.addWidget(cancel)
@@ -259,6 +268,7 @@ class TranscribePage(QWidget):
         self.lbl_status.setObjectName("TrStatus")
         top.addWidget(self.lbl_status, stretch=1)
         btn_settings = QPushButton("Settings")
+        set_role(btn_settings, "neutral")
         btn_settings.clicked.connect(self._open_settings)
         top.addWidget(btn_settings)
         root.addWidget(top_bar)
@@ -278,10 +288,12 @@ class TranscribePage(QWidget):
 
         row = QHBoxLayout()
         self.btn_translate = QPushButton("Translate")
+        set_role(self.btn_translate, "primary")
         self.btn_translate.setObjectName("TrPrimary")
         self.btn_translate.clicked.connect(self._on_translate_clicked)
         row.addWidget(self.btn_translate)
         btn_clear = QPushButton("Clear")
+        set_role(btn_clear, "neutral")
         btn_clear.clicked.connect(self._clear)
         row.addWidget(btn_clear)
         row.addStretch()
@@ -304,9 +316,11 @@ class TranscribePage(QWidget):
 
         copy_row = QHBoxLayout()
         btn_copy = QPushButton("Copy conlang text")
+        set_role(btn_copy, "neutral")
         btn_copy.clicked.connect(lambda: QApplication.clipboard().setText(self.output_text.toPlainText()))
         copy_row.addWidget(btn_copy)
         btn_copy_gloss = QPushButton("Copy gloss")
+        set_role(btn_copy_gloss, "neutral")
         btn_copy_gloss.clicked.connect(lambda: QApplication.clipboard().setText(self.lbl_gloss.text()))
         copy_row.addWidget(btn_copy_gloss)
         copy_row.addStretch()

@@ -199,6 +199,8 @@ class PageTest(unittest.TestCase):
         self.page._add_exception()
         row = self.page.exc_box.itemAt(0).widget()
         self.assertIsInstance(row, _ExceptionRow)
+        row.cmb_word.showPopup()                    # the list of words is read when the dropdown opens
+        row.cmb_word.hidePopup()
         row.cmb_word.setCurrentIndex(row.cmb_word.findData(self.ids["child"]))
         row.cmb_value.setCurrentIndex(row.cmb_value.findText("Plural"))
         self.assertEqual(self.gr.get_irregulars("L"), [])                 # no form yet
@@ -214,6 +216,38 @@ class PageTest(unittest.TestCase):
         self.assertEqual((again.cmb_value.currentText(), again.txt_form.text()), ("Plural", "chilo"))
         again.btn_remove.click()
         self.assertEqual(self.gr.get_irregulars("L"), [])
+
+    def test_word_dropdown_is_lazy_and_follows_the_lexicon(self):
+        self.page._add_exception()
+        row = self.page.exc_box.itemAt(0).widget()
+        self.assertEqual(row.cmb_word.count(), 1)                         # only "(choose a word)" until opened
+        row.cmb_word.showPopup()
+        row.cmb_word.hidePopup()
+        self.assertEqual(row.cmb_word.count(), 1 + 8)
+        row.cmb_word.setCurrentIndex(row.cmb_word.findData(self.ids["child"]))
+        row.cmb_value.setCurrentIndex(row.cmb_value.findText("Plural"))
+        row.txt_form.setText("chile")
+        row.txt_form.editingFinished.emit()
+        self.page.refresh()
+        again = self.page.exc_box.itemAt(0).widget()
+        self.assertEqual(again.cmb_word.count(), 2)                       # the chosen word only
+        self.assertIn("chil", again.cmb_word.currentText())
+        # the word is renamed on the Lexicon page; coming back to the page shows the new name
+        self.lex.update_entry(self.ids["child"], headword="kinda")
+        self.page.hide()
+        self.page.show()
+        again = self.page.exc_box.itemAt(0).widget()
+        self.assertIn("kinda", again.cmb_word.currentText())
+        self.assertEqual(again.cmb_word.currentData(), self.ids["child"])
+
+    def test_coming_back_to_the_page_keeps_its_rows(self):
+        self.page._add_rule()
+        row = self.rule_rows()[0]
+        row.txt_affix.setText("-ya")
+        row.txt_affix.editingFinished.emit()
+        self.page.hide()
+        self.page.show()
+        self.assertIs(self.rule_rows()[0], row)
 
     def test_on_saved_is_called(self):
         calls = []

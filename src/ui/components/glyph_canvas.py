@@ -25,6 +25,11 @@ from .canvas_math import (
 )
 
 
+try:
+    from ui.components.button_styles import set_role
+except ImportError:
+    from .button_styles import set_role
+
 class VectorStroke:
     # points are the drawn points, or, when `bezier` is true, the control points of a chain of cubic
     # curves (3 * n + 1 points). `brush` is "round", "square" or "tip". `angle` turns the square nib.
@@ -965,9 +970,9 @@ class CanvasStudioToolBar(QWidget):
         self.btn_redo.setToolTip("Redo (Ctrl+Y)")
         self.btn_redo.clicked.connect(self.canvas.redo)
         self.btn_clear = QPushButton(" Clear")
+        set_role(self.btn_clear, "danger", small=True)
         self.btn_clear.setIcon(asset_icon("Trash.svg"))
         self.btn_clear.setToolTip("Clear all strokes on canvas")
-        self.btn_clear.setStyleSheet("color: #d9534f;")
         self.btn_clear.clicked.connect(self._confirm_clear)
         flow.addWidget(self._group(self.btn_undo, self.btn_redo, self.btn_clear))
 

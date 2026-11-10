@@ -173,10 +173,56 @@ class _RuleRow(QFrame):
         }
 
 
+class _WordCombo(QComboBox):
+    """Starts with only the chosen word and fills in every word of the lexicon when it is opened,
+    so a page with many exceptions does not build thousands of items."""
+
+    def __init__(self, page: "GrammarSimplePage", entry_id: str = ""):
+        super().__init__()
+        self._page = page
+        self._filled = False
+        self.addItem("(choose a word)", "")
+        if entry_id:
+            label = page.word_label(str(entry_id))
+            if label:
+                self.addItem(label, str(entry_id))
+                self.setCurrentIndex(1)
+
+    def showPopup(self):
+        if not self._filled:
+            self._fill()
+        super().showPopup()
+
+    def reset(self) -> None:
+        """The lexicon may have changed: show the chosen word as it is now and read the list again when opened."""
+        current = self.currentData() or ""
+        self.blockSignals(True)
+        self.clear()
+        self.addItem("(choose a word)", "")
+        if current:
+            label = self._page.word_label(str(current))
+            if label:
+                self.addItem(label, str(current))
+                self.setCurrentIndex(1)
+        self.blockSignals(False)
+        self._filled = False
+
+    def _fill(self) -> None:
+        current = self.currentData() or ""
+        self.blockSignals(True)
+        self.clear()
+        self.addItem("(choose a word)", "")
+        for entry in self._page.word_choices():
+            self.addItem(GrammarSimplePage.entry_label(entry), entry["id"])
+        self.setCurrentIndex(max(self.findData(current), 0))
+        self.blockSignals(False)
+        self._filled = True
+
+
 class _ExceptionRow(QFrame):
     """'[word] + [Plural] = [form]'"""
 
-    def __init__(self, page: "GrammarSimplePage", entries: List[Dict[str, Any]], values: List[Dict[str, Any]],
+    def __init__(self, page: "GrammarSimplePage", values: List[Dict[str, Any]],
                  irregular: Optional[Dict[str, Any]] = None):
         super().__init__()
         self.setObjectName("GsRow")
@@ -189,13 +235,8 @@ class _ExceptionRow(QFrame):
         lay.setContentsMargins(10, 8, 10, 8)
         lay.setSpacing(6)
 
-        self.cmb_word = QComboBox()
+        self.cmb_word = _WordCombo(page, str(irregular.get("entry_id")) if irregular else "")
         self.cmb_word.setMinimumWidth(170)
-        self.cmb_word.addItem("(choose a word)", "")
-        for e in entries:
-            eng = (e.get("english_translation") or "").strip()
-            head = e.get("headword") or "?"
-            self.cmb_word.addItem(f"{head}  \u2014  {eng}" if eng else head, e["id"])
         track_conlang_combo(self.cmb_word, 12)
         lay.addWidget(self.cmb_word)
         lay.addWidget(_label("+"))
@@ -218,7 +259,6 @@ class _ExceptionRow(QFrame):
         lay.addWidget(self.btn_remove)
 
         if irregular:
-            self.cmb_word.setCurrentIndex(max(self.cmb_word.findData(str(irregular.get("entry_id"))), 0))
             if self._value_ids:
                 self.cmb_value.setCurrentIndex(max(self.cmb_value.findData(self._value_ids[0]), 0))
             self.txt_form.setText(irregular.get("form") or "")
@@ -256,7 +296,7 @@ class GrammarSimplePage(QWidget):
         self.language_id = language_id
         self.on_saved = None
         self._values: List[Dict[str, Any]] = []
-        self._entries: List[Dict[str, Any]] = []
+        self._words: Optional[List[Dict[str, Any]]] = None      # id / headword / English, read when needed
         self._loading = True
 
         if grammar_repo is not None and hasattr(grammar_repo, "ensure_default_features"):
@@ -441,6 +481,29 @@ class GrammarSimplePage(QWidget):
                 return [c.upper() for c in (v.get("word_classes") or [])]
         return []
 
+    @staticmethod
+    def entry_label(entry: Dict[str, Any]) -> str:
+        eng = (entry.get("english_translation") or "").strip()
+        head = entry.get("headword") or "?"
+        return f"{head}  \u2014  {eng}" if eng else head
+
+    def word_choices(self) -> List[Dict[str, Any]]:
+        if self._words is None:
+            repo = self.lexicon_repo
+            if repo is None:
+                self._words = []
+            elif hasattr(repo, "get_entry_labels"):
+                self._words = repo.get_entry_labels(self.language_id)
+            else:
+                self._words = repo.get_all_entries(self.language_id)
+        return self._words
+
+    def word_label(self, entry_id: str) -> str:
+        for entry in self.word_choices():
+            if str(entry["id"]) == entry_id:
+                return self.entry_label(entry)
+        return ""
+
     def _usable_values(self) -> List[Dict[str, Any]]:
         return [v for v in self._values if v.get("trigger")]
 
@@ -461,19 +524,25 @@ class GrammarSimplePage(QWidget):
         self.rules_header.setVisible(bool(rules))
 
         _clear_layout(self.exc_box)
-        entries = self.lexicon_repo.get_all_entries(self.language_id) if self.lexicon_repo is not None else []
-        self._entries = entries
+        self._words = None                      # the words are read again when they are needed
         irregulars = repo.get_irregulars(self.language_id) if repo is not None else []
         for irr in irregulars:
-            self.exc_box.addWidget(_ExceptionRow(self, entries, usable, irr))
+            self.exc_box.addWidget(_ExceptionRow(self, usable, irr))
         self.lbl_no_exc.setVisible(not irregulars)
         self._apply_fonts(self)
         self._loading = was
 
     def showEvent(self, event):
         super().showEvent(event)
-        if not self._loading:
-            self.refresh()          # words or features may have changed on other pages
+        if self._loading:
+            return
+        # Rules and features only change on this page, so the rows are kept. Words can change on the
+        # Lexicon page: read them again and refresh the word of each exception.
+        self._words = None
+        for i in range(self.exc_box.count()):
+            row = self.exc_box.itemAt(i).widget()
+            if isinstance(row, _ExceptionRow):
+                row.cmb_word.reset()
 
     # -------------------------------------------------------------- word order
     def _show_order(self, order: Dict[str, Any]) -> None:
@@ -566,7 +635,7 @@ class GrammarSimplePage(QWidget):
             self.lbl_notice.setText("There are no word forms to attach an exception to.")
             return
         self.lbl_notice.setText("")
-        row = _ExceptionRow(self, self._entries, self._usable_values())
+        row = _ExceptionRow(self, self._usable_values())
         self.exc_box.addWidget(row)
         self.lbl_no_exc.setVisible(False)
         self._apply_fonts(row)

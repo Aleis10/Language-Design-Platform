@@ -8,6 +8,11 @@ from PySide6.QtMultimedia import (
     QAudioOutput, QMediaPlayer, QMediaFormat
 )
 
+try:
+    from ui.components.button_styles import set_role
+except ImportError:
+    from .button_styles import set_role
+
 class GlyphAudioWidget(QWidget):
     audio_changed = Signal(str)  # Emits relative or absolute path to audio file
 
@@ -63,7 +68,7 @@ class GlyphAudioWidget(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        self.btn_record = QPushButton("⏺ Rec Audio")
+        self.btn_record = QPushButton("Rec Audio")
         self.btn_record.setObjectName("BtnRecordAudio")
         self.btn_record.setStyleSheet("""
             QPushButton#BtnRecordAudio {
@@ -78,7 +83,8 @@ class GlyphAudioWidget(QWidget):
         """)
         self.btn_record.clicked.connect(self.toggle_record)
 
-        self.btn_play = QPushButton("▶ Play")
+        self.btn_play = QPushButton("Play")
+        set_role(self.btn_play, "primary", small=True)
         self.btn_play.setObjectName("BtnPlayAudio")
         self.btn_play.setStyleSheet("""
             QPushButton#BtnPlayAudio {
@@ -95,6 +101,7 @@ class GlyphAudioWidget(QWidget):
         self.btn_play.clicked.connect(self.play_audio)
 
         self.btn_delete = QPushButton("Clear")
+        set_role(self.btn_delete, "danger", small=True)
         self.btn_delete.setObjectName("BtnDeleteAudio")
         self.btn_delete.setStyleSheet("""
             QPushButton#BtnDeleteAudio {
@@ -140,20 +147,20 @@ class GlyphAudioWidget(QWidget):
         self.btn_delete.setEnabled(has_file and not self.is_recording)
 
         if self.is_recording:
-            self.lbl_status.setText("● Recording in progress... Click to stop")
+            self.lbl_status.setText("Recording in progress... Click to stop")
             self.lbl_status.setStyleSheet("font-size: 11px; color: #d9534f; font-weight: bold;")
-            self.btn_record.setText("⏹ Stop Recording")
+            self.btn_record.setText("Stop Recording")
             self.btn_record.setStyleSheet("background-color: #333333; color: white; padding: 6px 12px; border-radius: 4px;")
         elif has_file:
             fname = os.path.basename(full_path)
             self.lbl_status.setText(f"✓ Recorded: {fname}")
             self.lbl_status.setStyleSheet("font-size: 11px; color: #28a745;")
-            self.btn_record.setText("⏺ Retake Audio")
+            self.btn_record.setText("Retake Audio")
             self.btn_record.setStyleSheet("background-color: #d9534f; color: white; padding: 6px 12px; border-radius: 4px;")
         else:
             self.lbl_status.setText("No pronunciation audio recorded")
             self.lbl_status.setStyleSheet("font-size: 11px; color: #888888;")
-            self.btn_record.setText("⏺ Rec Audio")
+            self.btn_record.setText("Rec Audio")
             self.btn_record.setStyleSheet("background-color: #d9534f; color: white; padding: 6px 12px; border-radius: 4px;")
 
     def toggle_record(self):
@@ -209,6 +216,6 @@ class GlyphAudioWidget(QWidget):
 
     def _on_playback_state_changed(self, state):
         if state == QMediaPlayer.PlaybackState.PlayingState:
-            self.btn_play.setText("⏸ Playing...")
+            self.btn_play.setText("Playing...")
         else:
-            self.btn_play.setText("▶ Play")
+            self.btn_play.setText("Play")

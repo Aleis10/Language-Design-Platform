@@ -170,9 +170,31 @@ class LexiconRepository:
                 (language_id,),
             )
             rows = [dict(row) for row in cursor.fetchall()]
+            # one query for the audio of every word (not one query per word)
+            cursor.execute(
+                "SELECT a.id, a.entry_id, a.variant_label, a.ipa_reading, a.audio_path "
+                "FROM lexicon_audio a JOIN lexicon l ON l.id = a.entry_id "
+                "WHERE l.language_id = ? ORDER BY a.created_at ASC;",
+                (language_id,),
+            )
+            by_entry: Dict[str, List[Dict[str, Any]]] = {}
+            for row in cursor.fetchall():
+                by_entry.setdefault(row["entry_id"], []).append(
+                    {"id": row["id"], "variant_label": row["variant_label"],
+                     "ipa_reading": row["ipa_reading"], "audio_path": row["audio_path"]})
             for entry in rows:
-                entry["audio_variants"] = self.get_entry_audio(entry["id"])
+                entry["audio_variants"] = by_entry.get(entry["id"], [])
             return rows
+
+    def get_entry_labels(self, language_id: str) -> List[Dict[str, Any]]:
+        """Just id, headword and English meaning of every word (fast; for dropdowns)."""
+        with self.db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, headword, english_translation FROM lexicon WHERE language_id = ? ORDER BY headword ASC;",
+                (language_id,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def get_entry_audio(self, entry_id: str) -> List[Dict[str, Any]]:
         with self.db_manager.get_connection() as conn:
@@ -230,6 +252,28 @@ class LexiconRepository:
                 (language_id, like, like, like),
             )
             rows = [dict(row) for row in cursor.fetchall()]
+            # one query for the audio of every word (not one query per word)
+            cursor.execute(
+                "SELECT a.id, a.entry_id, a.variant_label, a.ipa_reading, a.audio_path "
+                "FROM lexicon_audio a JOIN lexicon l ON l.id = a.entry_id "
+                "WHERE l.language_id = ? ORDER BY a.created_at ASC;",
+                (language_id,),
+            )
+            by_entry: Dict[str, List[Dict[str, Any]]] = {}
+            for row in cursor.fetchall():
+                by_entry.setdefault(row["entry_id"], []).append(
+                    {"id": row["id"], "variant_label": row["variant_label"],
+                     "ipa_reading": row["ipa_reading"], "audio_path": row["audio_path"]})
             for entry in rows:
-                entry["audio_variants"] = self.get_entry_audio(entry["id"])
+                entry["audio_variants"] = by_entry.get(entry["id"], [])
             return rows
+
+    def get_entry_labels(self, language_id: str) -> List[Dict[str, Any]]:
+        """Just id, headword and English meaning of every word (fast; for dropdowns)."""
+        with self.db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, headword, english_translation FROM lexicon WHERE language_id = ? ORDER BY headword ASC;",
+                (language_id,),
+            )
+            return [dict(row) for row in cursor.fetchall()]

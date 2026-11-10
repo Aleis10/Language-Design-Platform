@@ -17,6 +17,11 @@ from .flow_layout import FlowLayout
 # space bar) and watch a test text change while you drag. Nothing is saved until Save is pressed. The window
 # blocks the rest of the app while it is open, which keeps it simple.
 
+try:
+    from ui.components.button_styles import set_role
+except ImportError:
+    from .button_styles import set_role
+
 PREVIEW_DELAY_MS = 250      # the preview is rebuilt this long after the last slider move
 DEFAULT_PREVIEW_SIZE = 32   # points
 
@@ -67,11 +72,14 @@ class TypefaceDialog(QDialog):
         tools = QHBoxLayout()
         tools.setSpacing(8)
         self.btn_all = QPushButton("Insert all glyphs")
+        set_role(self.btn_all, "neutral", small=True)
         self.btn_all.setToolTip("Adds every glyph, separated by spaces, to check spacing and word gaps")
         self.btn_all.clicked.connect(self._insert_all)
         self.btn_space = QPushButton("Space")
+        set_role(self.btn_space, "neutral", small=True)
         self.btn_space.clicked.connect(lambda: self._insert(" "))
         self.btn_clear = QPushButton("Clear text")
+        set_role(self.btn_clear, "neutral", small=True)
         self.btn_clear.clicked.connect(self.test_text.clear)
         for b in (self.btn_all, self.btn_space, self.btn_clear):
             b.setFocusPolicy(Qt.FocusPolicy.NoFocus)        # the test text keeps the keyboard focus
@@ -119,11 +127,14 @@ class TypefaceDialog(QDialog):
         # buttons
         buttons = QHBoxLayout()
         self.btn_reset = QPushButton("Reset")
+        set_role(self.btn_reset, "neutral")
         self.btn_reset.setToolTip("Back to the default look")
         self.btn_reset.clicked.connect(self._reset)
         self.btn_cancel = QPushButton("Cancel")
+        set_role(self.btn_cancel, "neutral")
         self.btn_cancel.clicked.connect(self.reject)
         self.btn_save = QPushButton("Save")
+        set_role(self.btn_save, "success")
         self.btn_save.setObjectName("TfSave")
         self.btn_save.setDefault(False)
         self.btn_save.clicked.connect(self.accept)

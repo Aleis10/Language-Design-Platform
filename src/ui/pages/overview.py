@@ -3,13 +3,18 @@ from PySide6.QtWidgets import (
     QWidget, QTextEdit, QComboBox, QLineEdit, QVBoxLayout, QHBoxLayout, QFrame, QPushButton,
     QLabel, QScrollArea, QFormLayout, QMessageBox, QDialog, QListWidget, QListWidgetItem
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QFont
 from digital_keyboard import (
     track_conlang_widget, track_conlang_combo, apply_conlang_to_fields,
     install_conlang_delegate, ConlangLabel,
 )
 from PySide6.QtGui import QIcon
+
+try:
+    from ui.components.button_styles import set_role, set_icon_button
+except ImportError:
+    from ..components.button_styles import set_role, set_icon_button
 
 class Overview_Page(QWidget):
     def __init__(self, overview_repo=None, language_id=None, parent=None):
@@ -33,31 +38,14 @@ class Overview_Page(QWidget):
         self.status_combo.setEditable(True)
         self.status_combo.addItems(["Drafting", "Active / In Development", "Stable / Complete", "Archived"])
 
-        self.btn_save = QPushButton("Save Overview")
-        self.btn_save.setObjectName("BtnSaveOverview")
-        self.btn_save.setStyleSheet("""
-            QPushButton#BtnSaveOverview {
-                background-color: #28a745;
-                color: #ffffff;
-                font-weight: bold;
-                padding: 8px 16px;
-                border-radius: 6px;
-                border: none;
-            }
-            QPushButton#BtnSaveOverview:hover {
-                background-color: #218838;
-            }
-        """)
-        self.btn_save.clicked.connect(self.save_data)
-
         self.btn_add_section = QPushButton("+ Add Custom Section")
+        set_role(self.btn_add_section, "primary")
         self.btn_add_section.setObjectName("BtnAddSection")
         self.btn_add_section.clicked.connect(self.prompt_add_section)
 
         top_bar.addWidget(status_label)
         top_bar.addWidget(self.status_combo)
         top_bar.addStretch()
-        top_bar.addWidget(self.btn_save)
         top_bar.addWidget(self.btn_add_section)
 
         main_layout.addWidget(top_bar_widget, stretch=0)
@@ -162,6 +150,32 @@ class Overview_Page(QWidget):
         main_layout.addWidget(scroll_area, stretch=1)
 
         self.load_data()
+
+        # The page saves itself: a moment after the last change, and when it is left.
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.setInterval(600)
+        self._autosave_timer.timeout.connect(self.save_data)
+        for edit in (self.input_exonym, self.input_endonym, self.input_code, self.input_demonym,
+                     self.input_pop, self.input_family):
+            edit.textChanged.connect(self._schedule_autosave)
+        for combo in (self.combo_word_order, self.combo_morphology, self.combo_script, self.status_combo):
+            combo.currentTextChanged.connect(self._schedule_autosave)
+        for box in (self.text_history, self.text_culture):
+            box.textChanged.connect(self._schedule_autosave)
+
+    def _schedule_autosave(self, *_args):
+        self._autosave_timer.start()
+
+    def flush_autosave(self):
+        # save at once if a change is still waiting
+        if self._autosave_timer.isActive():
+            self._autosave_timer.stop()
+            self.save_data()
+
+    def hideEvent(self, event):
+        self.flush_autosave()
+        super().hideEvent(event)
 
     def load_data(self):
         if not self.overview_repo or not self.language_id:
@@ -290,10 +304,12 @@ class Custom_Section_Dialog(QDialog):
 
         btn_layout = QHBoxLayout()
         self.btn_ok = QPushButton("Add Section")
+        set_role(self.btn_ok, "primary")
         self.btn_ok.setObjectName("BtnAddSection")
         self.btn_ok.clicked.connect(self.accept)
 
         self.btn_cancel = QPushButton("Cancel")
+        set_role(self.btn_cancel, "neutral")
         self.btn_cancel.clicked.connect(self.reject)
 
         btn_layout.addStretch()
@@ -324,15 +340,12 @@ class Custom_Card(QFrame):
         self.title_label = ConlangLabel(title)
         self.title_label.setProperty("class", "section-title")
 
-        self.btn_rename = QPushButton()
-        self.btn_rename.setIcon(QIcon("/home/pranav/Documents/Collage_R/code/Python/Lexicography/Language-Design-Platform/assets/icons/edit.svg"))
+        self.btn_rename = set_icon_button(QPushButton(), "edit.svg", "Rename section")
         self.btn_collapse = QPushButton("▼")
-        self.btn_delete = QPushButton()
-        self.btn_delete.setIcon(QIcon("/home/pranav/Documents/Collage_R/code/Python/Lexicography/Language-Design-Platform/assets/icons/Trash.svg"))
+        self.btn_delete = set_icon_button(QPushButton(), "Trash.svg", "Delete section", danger=True)
 
-        for btn in (self.btn_rename, self.btn_collapse, self.btn_delete):
-            btn.setFixedSize(28, 28)
-            btn.setProperty("class", "card-control-btn")
+        self.btn_collapse.setFixedSize(28, 28)
+        self.btn_collapse.setProperty("class", "card-control-btn")
 
         self.btn_rename.clicked.connect(self.rename_card)
         self.btn_collapse.clicked.connect(self.toggle_collapse)
@@ -369,6 +382,7 @@ class Custom_Card(QFrame):
             self.item_input = QLineEdit()
             self.item_input.setPlaceholderText("Add item (e.g. dialect name, proverb)...")
             self.btn_add_item = QPushButton("+ Add")
+            set_role(self.btn_add_item, "primary", small=True)
             self.btn_add_item.setObjectName("BtnAddListItem")
             
             list_controls.addWidget(self.item_input)

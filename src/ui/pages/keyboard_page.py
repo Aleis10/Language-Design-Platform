@@ -24,6 +24,11 @@ except (ImportError, ValueError):
     from ..database.glyph_db import GlyphRepository
     from ...font_tools.font_registry import load_font_mapping
 
+try:
+    from ui.components.button_styles import set_role
+except ImportError:
+    from ..components.button_styles import set_role
+
 QWERTY_ROWS = [
     ["`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "Backspace"],
     ["Tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"],
@@ -315,14 +320,17 @@ class KeyboardPage(QWidget):
         header.addWidget(self.combo_presets)
 
         btn_add_preset = QPushButton("+ New Preset")
+        set_role(btn_add_preset, "primary")
         btn_add_preset.clicked.connect(self._add_preset)
         header.addWidget(btn_add_preset)
 
         btn_rename_preset = QPushButton("Rename")
+        set_role(btn_rename_preset, "neutral")
         btn_rename_preset.clicked.connect(self._rename_preset)
         header.addWidget(btn_rename_preset)
 
         btn_delete_preset = QPushButton("Delete")
+        set_role(btn_delete_preset, "danger")
         btn_delete_preset.setObjectName("KbdDeletePreset")
         btn_delete_preset.clicked.connect(self._delete_preset)
         header.addWidget(btn_delete_preset)
@@ -342,22 +350,25 @@ class KeyboardPage(QWidget):
         toolbar.addWidget(self.lbl_count)
         toolbar.addStretch()
         btn_typeface = QPushButton("Font Style...")
+        set_role(btn_typeface, "neutral")
         btn_typeface.setToolTip("Change how the language font looks: scale, thickness and spacing, "
                                 "with a live preview")
         btn_typeface.clicked.connect(self._open_typeface)
         toolbar.addWidget(btn_typeface)
         btn_save = QPushButton("Save")
+        set_role(btn_save, "success")
         btn_save.setObjectName("KbdSave")
         btn_save.setToolTip("Save this preset's mappings and rebuild the language font "
                             "from ALL glyphs, so the assigned glyphs become typeable everywhere.")
         btn_save.clicked.connect(self._save_and_rebuild)
         toolbar.addWidget(btn_save)
         btn_clear = QPushButton("Clear All")
+        set_role(btn_clear, "danger")
         btn_clear.clicked.connect(self._confirm_clear_all)
         toolbar.addWidget(btn_clear)
         body_layout.addLayout(toolbar)
 
-        hint = QLabel("Click a key to assign a character, Unicode PPUA code, or glyph. Create presets for alternate layouts.")
+        hint = QLabel("Click a key to assign a character")
         hint.setObjectName("KbdHint")
         body_layout.addWidget(hint)
 
@@ -405,14 +416,12 @@ class KeyboardPage(QWidget):
         combo_head.addWidget(lbl_combo)
         combo_head.addStretch()
         btn_add_combo = QPushButton("+ Add combination")
+        set_role(btn_add_combo, "primary")
         btn_add_combo.clicked.connect(lambda: self._add_combo_row())
         combo_head.addWidget(btn_add_combo)
         body_layout.addLayout(combo_head)
 
-        combo_hint = QLabel("Choose a mode, the trigger key, the key to combine with, and the result.  "
-                            "Once: press the trigger, then the key.  Hold: keep the trigger pressed while "
-                            "you type.  Toggle: press once to switch on, again to switch off (like Caps Lock).  "
-                            "A trigger key can be empty or have its own glyph.")
+        combo_hint = QLabel("Choose a mode")
         combo_hint.setObjectName("KbdHint")
         combo_hint.setWordWrap(True)
         body_layout.addWidget(combo_hint)

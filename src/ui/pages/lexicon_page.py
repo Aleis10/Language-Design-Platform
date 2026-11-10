@@ -17,6 +17,11 @@ except ImportError:
     from ..database.lexicon_db import LexiconRepository
     from ..components.glyph_audio import GlyphAudioWidget
 
+try:
+    from ui.components.button_styles import set_role
+except ImportError:
+    from ..components.button_styles import set_role
+
 POS_OPTIONS = ["", "NOUN", "VERB", "ADJ", "ADV", "PRON", "PREP", "CONJ", "DET", "PART", "INTERJ", "NUM"]
 
 class _EntryDialog(QDialog):
@@ -94,12 +99,15 @@ class _EntryDialog(QDialog):
 
         audio_btns = QHBoxLayout()
         btn_add_audio = QPushButton("Add Variant")
+        set_role(btn_add_audio, "primary", small=True)
         btn_add_audio.setObjectName("LexAudioBtn")
         btn_add_audio.clicked.connect(self._add_variant)
         btn_update_audio = QPushButton("Update Selected")
+        set_role(btn_update_audio, "success", small=True)
         btn_update_audio.setObjectName("LexAudioBtn")
         btn_update_audio.clicked.connect(self._update_variant)
         btn_remove_audio = QPushButton("Remove Selected")
+        set_role(btn_remove_audio, "danger", small=True)
         btn_remove_audio.setObjectName("LexAudioBtnRemove")
         btn_remove_audio.clicked.connect(self._remove_variant)
         audio_btns.addWidget(btn_add_audio)
@@ -314,14 +322,17 @@ class LexiconPage(QWidget):
         top.addSpacing(12)
 
         btn_add = QPushButton("+ Add Entry")
+        set_role(btn_add, "primary")
         btn_add.clicked.connect(self._add_entry)
         top.addWidget(btn_add)
 
         btn_edit = QPushButton("Edit")
+        set_role(btn_edit, "primary")
         btn_edit.clicked.connect(self._edit_entry)
         top.addWidget(btn_edit)
 
         btn_delete = QPushButton("Delete")
+        set_role(btn_delete, "danger")
         btn_delete.setObjectName("LexDelete")
         btn_delete.clicked.connect(self._delete_entry)
         top.addWidget(btn_delete)

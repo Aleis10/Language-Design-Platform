@@ -29,6 +29,11 @@ except (ImportError, ValueError):
     from ..components.ipa_picker import IPAPickerDialog
     from ..components.dark_file_dialog import open_dark_dialog
     from ...font_tools.font_registry import get_fonts_dir, register_language_font
+try:
+    from ui.components.button_styles import set_role, set_icon_button
+except ImportError:
+    from ..components.button_styles import set_role, set_icon_button
+
 def get_base_data_dir() -> str:
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     data_dir = os.path.join(root, "data")
@@ -57,10 +62,11 @@ class AddGroupDialog(QDialog):
 
         btn_box = QHBoxLayout()
         btn_cancel = QPushButton("Cancel")
+        set_role(btn_cancel, "neutral")
         btn_cancel.clicked.connect(self.reject)
 
         btn_save = QPushButton("Save Group")
-        btn_save.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 6px 14px; border-radius: 4px;")
+        set_role(btn_save, "success")
         btn_save.clicked.connect(self._validate_and_accept)
 
         btn_box.addStretch()
@@ -142,11 +148,12 @@ class Glyphs_Page(QWidget):
         lbl_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #000000;")
 
         self.input_search = QLineEdit()
-        self.input_search.setPlaceholderText("🔍 Filter symbols by name, meaning, or IPA...")
+        self.input_search.setPlaceholderText("Filter symbols by name, meaning, or IPA...")
         self.input_search.setFixedWidth(280)
         self.input_search.textChanged.connect(self._filter_glyphs)
 
         btn_add_group = QPushButton("+ Add Group")
+        set_role(btn_add_group, "primary")
         btn_add_group.setObjectName("BtnAddGroup")
         btn_add_group.clicked.connect(self.prompt_add_group)
 
@@ -193,6 +200,7 @@ class Glyphs_Page(QWidget):
             elbl2 = QLabel("Organize your logograms, radicals, and custom glyphs into classified sets.")
             elbl2.setStyleSheet("font-size: 13px; color: #888888; margin-top: 4px; margin-bottom: 12px;")
             ebtn = QPushButton("+ Create First Group")
+            set_role(ebtn, "primary")
             ebtn.setObjectName("BtnAddGroup")
             ebtn.clicked.connect(self.prompt_add_group)
             elayout.addWidget(elbl1, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -243,16 +251,13 @@ class Glyphs_Page(QWidget):
             title_col.addWidget(lbl_desc)
 
         btn_add = QPushButton("+ Add Glyph")
-        btn_add.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 4px 10px; border-radius: 4px;")
+        set_role(btn_add, "primary")
         btn_add.clicked.connect(lambda _, gid=group["id"], gname=group["name"]: self.create_new_glyph(gid, gname))
 
-        btn_rename = QPushButton("✏️")
-        btn_rename.setToolTip("Rename Group")
+        btn_rename = set_icon_button(QPushButton(), "edit.svg", "Rename Group")
         btn_rename.clicked.connect(lambda _, g=group: self.prompt_edit_group(g))
 
-        btn_del = QPushButton("🗑")
-        btn_del.setToolTip("Delete Group")
-        btn_del.setStyleSheet("color: #d9534f;")
+        btn_del = set_icon_button(QPushButton(), "Trash.svg", "Delete Group", danger=True)
         btn_del.clicked.connect(lambda _, gid=group["id"], gname=group["name"]: self.confirm_delete_group(gid, gname))
 
         h_layout.addLayout(title_col)
@@ -321,22 +326,16 @@ class Glyphs_Page(QWidget):
             ipa_lbl.setStyleSheet("font-family: monospace; font-size: 10px; background: #eef4ff; color: #005999; padding: 1px 5px; border-radius: 3px;")
             badges_row.addWidget(ipa_lbl)
 
-        if glyph.get("audio_path"):
-            audio_lbl = QLabel("🔊")
-            audio_lbl.setToolTip("Pronunciation audio attached")
-            badges_row.addWidget(audio_lbl)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
         btn_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         btn_edit = QPushButton("Edit")
-        btn_edit.setStyleSheet("background-color: #007acc; color: white; padding: 3px 10px; font-size: 11px; border-radius: 3px;")
+        set_role(btn_edit, "primary", small=True)
         btn_edit.clicked.connect(lambda _, g=glyph, grp=group: self.open_studio_mode(g, grp))
 
-        btn_del = QPushButton("🗑")
-        btn_del.setStyleSheet("border: none; color: #888888; font-size: 11px;")
-        btn_del.setToolTip("Delete Glyph")
+        btn_del = set_icon_button(QPushButton(), "Trash.svg", "Delete Glyph", danger=True)
         btn_del.clicked.connect(lambda _, gid=glyph["id"], gname=(glyph["name"] or "(unnamed)"): self.confirm_delete_glyph(gid, gname))
 
         btn_row.addWidget(btn_edit)
@@ -383,6 +382,7 @@ class Glyphs_Page(QWidget):
         h_layout.setSpacing(12)
 
         btn_back = QPushButton("← Back to Gallery")
+        set_role(btn_back, "neutral")
         btn_back.setObjectName("BtnBackGallery")
         btn_back.clicked.connect(self.back_to_gallery)
 
@@ -390,7 +390,8 @@ class Glyphs_Page(QWidget):
         self.lbl_breadcrumb.setStyleSheet("font-size: 14px; font-weight: bold; color: #333333;")
 
 
-        btn_save = QPushButton("💾 Save Glyph")
+        btn_save = QPushButton("Save Glyph")
+        set_role(btn_save, "success")
         btn_save.setObjectName("BtnSaveGlyph")
         btn_save.clicked.connect(self.save_active_glyph)
 
@@ -449,9 +450,9 @@ class Glyphs_Page(QWidget):
         ipa_row = QHBoxLayout()
         self.input_ipa = QLineEdit()
         self.input_ipa.setPlaceholderText("e.g., /kʰa/")
-        btn_ipa_picker = QPushButton("🔤 IPA")
+        btn_ipa_picker = QPushButton("IPA")
+        set_role(btn_ipa_picker, "neutral", small=True)
         btn_ipa_picker.setToolTip("Open IPA Phonetic Helper")
-        btn_ipa_picker.setStyleSheet("padding: 5px 8px; font-weight: bold;")
         btn_ipa_picker.clicked.connect(self._open_ipa_picker)
         ipa_row.addWidget(self.input_ipa)
         ipa_row.addWidget(btn_ipa_picker)
@@ -465,17 +466,17 @@ class Glyphs_Page(QWidget):
 
         m_layout.addSpacing(8)
         lbl_ext = QLabel("Symbol / Glyph Import:")
-        btn_import_svg = QPushButton("📂 Import Symbol / Glyph")
+        btn_import_svg = QPushButton("Import Symbol / Glyph")
+        set_role(btn_import_svg, "primary")
         btn_import_svg.setToolTip("Import a vector SVG file into the canvas")
-        btn_import_svg.setStyleSheet("padding: 6px 12px; border: 1px solid #cccccc; border-radius: 4px; background: white;")
         btn_import_svg.clicked.connect(self._import_external_svg)
         m_layout.addWidget(lbl_ext)
         m_layout.addWidget(btn_import_svg)
         
         # Add Glyph button - adds existing glyphs
         self.btn_add_existing = QPushButton("+ Add Glyph")
+        set_role(self.btn_add_existing, "primary")
         self.btn_add_existing.setToolTip("Add an existing glyph to edit")
-        self.btn_add_existing.setStyleSheet("padding: 6px 12px; border: 1px solid #cccccc; border-radius: 4px; background: white;")
         self.btn_add_existing.clicked.connect(self._add_existing_glyph)
         m_layout.addWidget(self.btn_add_existing)
         
@@ -530,10 +531,11 @@ class Glyphs_Page(QWidget):
         
         btn_box = QHBoxLayout()
         btn_cancel = QPushButton("Cancel")
+        set_role(btn_cancel, "neutral")
         btn_cancel.clicked.connect(dialog.reject)
         
         btn_add = QPushButton("Add Glyph")
-        btn_add.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 6px 14px; border-radius: 4px;")
+        set_role(btn_add, "primary")
         btn_add.clicked.connect(lambda: dialog.accept())
         
         btn_box.addStretch()
@@ -847,16 +849,13 @@ class Glyphs_Page(QWidget):
             title_col.addWidget(lbl_desc)
 
         btn_add = QPushButton("+ Add Glyph")
-        btn_add.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 4px 10px; border-radius: 4px;")
+        set_role(btn_add, "primary")
         btn_add.clicked.connect(lambda _, gid=group["id"], gname=group["name"]: self.create_new_glyph(gid, gname))
 
-        btn_rename = QPushButton("✏️")
-        btn_rename.setToolTip("Rename Group")
+        btn_rename = set_icon_button(QPushButton(), "edit.svg", "Rename Group")
         btn_rename.clicked.connect(lambda _, g=group: self.prompt_edit_group(g))
 
-        btn_del = QPushButton("🗑")
-        btn_del.setToolTip("Delete Group")
-        btn_del.setStyleSheet("color: #d9534f;")
+        btn_del = set_icon_button(QPushButton(), "Trash.svg", "Delete Group", danger=True)
         btn_del.clicked.connect(lambda _, gid=group["id"], gname=group["name"]: self.confirm_delete_group(gid, gname))
 
         h_layout.addLayout(title_col)
@@ -925,22 +924,16 @@ class Glyphs_Page(QWidget):
             ipa_lbl.setStyleSheet("font-family: monospace; font-size: 10px; background: #eef4ff; color: #005999; padding: 1px 5px; border-radius: 3px;")
             badges_row.addWidget(ipa_lbl)
 
-        if glyph.get("audio_path"):
-            audio_lbl = QLabel("🔊")
-            audio_lbl.setToolTip("Pronunciation audio attached")
-            badges_row.addWidget(audio_lbl)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
         btn_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         btn_edit = QPushButton("Edit")
-        btn_edit.setStyleSheet("background-color: #007acc; color: white; padding: 3px 10px; font-size: 11px; border-radius: 3px;")
+        set_role(btn_edit, "primary", small=True)
         btn_edit.clicked.connect(lambda _, g=glyph, grp=group: self.open_studio_mode(g, grp))
 
-        btn_del = QPushButton("🗑")
-        btn_del.setStyleSheet("border: none; color: #888888; font-size: 11px;")
-        btn_del.setToolTip("Delete Glyph")
+        btn_del = set_icon_button(QPushButton(), "Trash.svg", "Delete Glyph", danger=True)
         btn_del.clicked.connect(lambda _, gid=glyph["id"], gname=(glyph["name"] or "(unnamed)"): self.confirm_delete_glyph(gid, gname))
 
         btn_row.addWidget(btn_edit)
